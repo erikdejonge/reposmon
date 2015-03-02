@@ -1,21 +1,55 @@
 # coding=utf-8
 """
-Testpygit
+reposmon
 
 Usage:
-    docker_on_git <giturl> <docker>
+    reposmon <giturl> <command>
+    [-g <gitdirectory>|--git-directory=<gitdirectory>]
+    [-c <commanddirectory>|--command-directory=<commanddirectory>]
 
 Options:
-  -h --help     Show this screen.
+  -h --help                               Show this screen.
+  -i --check-interval                     Seconds between checks [default: 10].
+  -g --git-directory=<gitdirectory>          Directory to check the git repos out [default: .].
+  -c --command-directory=<commanddirectory>  Directory from where to run the command [default: .].
 """
 
 # coding=utf-8
-
-from os.path import join, expanduser, exists, basename
-
+from os.path import join, expanduser, exists, basename, expanduser
 from docopt import docopt
-from schema import Schema, SchemaError
+from schema import Schema, SchemaError, Or, Optional, And
 from git import Repo
+
+
+def print_dictionary(argdict):
+    keys = argdict.keys()
+    keys.sort(key=lambda x: len(x))
+    sp = ""
+    lk = 0
+    ls = []
+    for k in keys:
+        s = "\033[31m" + k + "\033[0m"
+        s += "\033[32m" + "`:" + argdict[k] + "\033[0m\n"
+        ls.append((len(k), s))
+        
+        if len(k) > lk:
+            lk = len(k)
+    for lns, s in ls:
+        s = s.replace("`", " " * (1 + (lk - lns)))
+        sp += s
+    print sp
+
+
+def print_arguments(arguments):
+    """
+    @type arguments: dict
+    @return: None
+    """
+    options = {}
+    arguments = {}
+    for k in arguments:
+        if k.startswith("")
+    print_dictionary(arguments)
 
 
 def parse_docopt():
@@ -23,13 +57,30 @@ def parse_docopt():
     parse_docopt
     """
     arguments = dict(docopt(__doc__, version='0.1'))
-    arguments = dict((x.replace("<", "").replace(">", ""), y) for x, y in arguments.viewitems())
-    try:
-        schema = Schema({"giturl": lambda x: "git@" in x}, error="git@ should be in url")
-        arguments = schema.validate(arguments)
-    except SchemaError as e:
-        raise e
 
+    for k in arguments:
+        if "directory" in k or "path" in k:
+            arguments[k] = arguments[k].replace("~", expanduser("~"))
+    try:
+        schema = Schema({"<command>": str,
+                         "<giturl>": lambda x: ".git" in x,
+                         Optional("-i"): int,
+                         Optional("--check-interval"): int,
+                         Optional("--git-directory"): And(str, exists, error='--git-directory should exist'),
+                         Optional("--command-directory"): And(str, exists, error='--command-directory should exist')})
+
+        arguments = schema.validate(arguments)
+        arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
+    except SchemaError as e:
+        if "lambda" in str(e):
+            err = "Error: giturl should end with .git"
+        else:
+            err = str(e)
+
+        print "\033[31m" + err, "\033[0m"
+        exit(1)
+
+    print_arguments(arguments)
     return arguments
 
 
@@ -83,7 +134,8 @@ def main():
     git@github.com:erikdejonge/schema.git
     """
     arguments = parse_docopt()
-    check_repos(arguments["giturl"])
+
+    # check_repos(arguments["giturl"])
 
 
 if __name__ == "__main__":
