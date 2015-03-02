@@ -243,7 +243,11 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
                 print "\033[32mPulling:", name, "\033[0m"
 
             r = Repo(gp)
+            config = r.config_reader()
             origin = r.remote()
+            if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
+                raise SystemExit("different remote url")
+
             hcommit_pre = r.head.commit
             origin.fetch()
             origin.pull()
@@ -251,8 +255,10 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
             if hcommit_post != hcommit_pre:
                 index = r.index
                 changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
+
                 if verbose:
                     print "\033[34m", changed, "\033[0m"
+
                 return True
             else:
                 return False
@@ -286,6 +292,7 @@ def check_repos(folder, url, verbose=False):
     """
     name = basename(url).split(".")[0]
     gp = join(folder, name)
+
     if verbose:
         print "\033[30musing github folder:", gp, "\033[0m"
 
@@ -298,25 +305,25 @@ def main():
     main
     git@github.com:erikdejonge/schema.git
     """
-    args = get_arguments(False)
+    try:
+        args = get_arguments(False)
 
-    while True:
-        try:
+        while True:
             if check_repos(args.gitfolder, args.giturl, verbose=args.verbose):
                 if args.verbose:
                     print "\033[32mchanged, calling:", args.cmdfolder, "\033[0m"
             else:
                 if args.verbose:
-                    print "\033[30m"+args.giturl, "not changed\033[0m"
+                    print "\033[30m" + args.giturl, "not changed\033[0m"
 
-        except SystemExit:
-            break
+            if args.once:
+                break
 
-        if args.once:
-            break
-
-        time.sleep(args.interval)
+            time.sleep(args.interval)
+    except SystemExit as e:
+        print "\033[31mSystemExit exception:", e, "\033[0m"
 
 
 if __name__ == "__main__":
+
     main()
