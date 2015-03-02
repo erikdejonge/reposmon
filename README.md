@@ -12,9 +12,18 @@ For example
     
 
 ###use
-   
+      
+```
+python reposmon.py <giturl> <bashcmd> [-i|--check-interval] [-d|--git-directory] [-f|--command-directory]
+```
+When <giturl> in local directory or work-directory changes, execute the command in the local directory or command-directory.
+
 ```bash
-python reposmon.py 
+python reposmon.py git@github.com:erikdejonge/reposmon.git "docker build ."
+```
+or
+```bash
+python reposmon.py git@github.com:erikdejonge/reposmon.git "docker build ." -d ~/workspace/reposmon -f ~/workspace/mycontainer
 ```
 
 ###optional
@@ -37,4 +46,6 @@ alias | grep -v '^$' > ~/.bash_profile_only_alias;
 cat ~/.bash_profile_without_alias > ~/.bash_profile
 echo -e "\n" >>  ~/.bash_profile
 cat ~/.bash_profile_only_alias >>  ~/.bash_profile
+rm ~/.bash_profile_without_alias
+rm ~/.bash_profile_only_alias
 ```
