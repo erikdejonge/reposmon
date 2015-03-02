@@ -17,7 +17,8 @@ For example
 python reposmon.py 
 ```
 
-######bash alias (optional)
+###optional
+#####bash alias
 alias reposmon="#/usr/bin/env python ~/[...]/reposmon/reposmon.py
 
 install alias with a workspace checkout of reposmon:
@@ -26,7 +27,7 @@ install alias with a workspace checkout of reposmon:
 echo alias reposmon=\"#/usr/bin/env python ~/workspace/reposmon/reposmon.py\" >> ~/.bash_profile
 ```
 
-######sort aliases on osx (optional)
+#####sort aliases on osx
 On osx the alias command outputs all aliasses in sorted order
 
 ```bash
