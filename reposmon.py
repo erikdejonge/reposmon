@@ -44,6 +44,7 @@ def dictionary_for_console(argdict, indent=""):
         v = str(argdict[k]).strip()
         num = v.isdigit()
         ispath = exists(v)
+
         if num:
             s += "\033[32m" + v + "\033[0m\n"
         elif ispath:
@@ -132,20 +133,25 @@ class Arguments(object):
     Argument dict to boject
     """
 
-    def __init__(self, positional, options):
+    def __init__(self, positional=None, options=None, yamlfile=None):
         """
         @type positional: dict
 
         @type options: dict
         @return: None
         """
-        self.positional = positional.copy()
-        self.options = options.copy()
-        dictionary = positional.copy()
-        dictionary.update(options.copy())
-        self.reprdict = {}
-        self.reprdict["positional"] = positional.copy()
-        self.reprdict["options"] = options.copy()
+        dictionary = {}
+
+        if positional and options:
+            self.positional = positional.copy()
+            self.options = options.copy()
+            dictionary = positional.copy()
+            dictionary.update(options.copy())
+            self.reprdict = {}
+            self.reprdict["positional"] = positional.copy()
+            self.reprdict["options"] = options.copy()
+        elif yamlfile:
+            raise AssertionError("not implemented")
 
         def _traverse(key, element):
             """
