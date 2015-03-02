@@ -10,6 +10,7 @@ Usage:
 Options:
   -h --help                   Show this screen.
   -o --once                   Run only once
+  -v --verbose                Verbose mode
   -i --interval=<interval>    Seconds between checks [default: 10].
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
@@ -19,7 +20,7 @@ Options:
 
 import os
 import yaml
-from git import Repo
+from git import Repo, GitCommandError
 from os.path import join, expanduser, exists, basename, expanduser
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, And, Use
@@ -29,7 +30,6 @@ from subprocess import call
 def dictionary_for_console(argdict, indent=""):
     """
     @type argdict: dict
-
     @type indent: str
     @return: sp
     """
@@ -46,7 +46,7 @@ def dictionary_for_console(argdict, indent=""):
         ispath = exists(v)
 
         if num:
-            s += "\033[32m" + v + "\033[0m\n"
+            s += "\033[96m" + v + "\033[0m\n"
         elif ispath:
             s += "\033[35m" + v + "\033[0m\n"
         elif v == "False":
@@ -136,7 +136,6 @@ class Arguments(object):
     def __init__(self, positional=None, options=None, yamlfile=None):
         """
         @type positional: dict
-
         @type options: dict
         @return: None
         """
@@ -156,7 +155,6 @@ class Arguments(object):
         def _traverse(key, element):
             """
             @type key: str, unicode
-
             @type element: str, unicode
             @return: None
             """
@@ -180,6 +178,7 @@ def get_arguments(debug):
     """
     parse_docopt
     """
+    verbose = debug
     arguments = dict(docopt(__doc__, version='0.1'))
     try:
         for k in arguments:
@@ -230,48 +229,68 @@ def get_arguments(debug):
     return Arguments(posarg, opts)
 
 
-def clone_or_pull_from(remote, name):
+def clone_or_pull_from(gp, remote, name, verbose=False):
     """
+    @type gp: str, unicode
     @type remote: str, unicode
-
     @type name: str, unicode
+    @type verbose: bool
     @return: None
     """
-    gp = join(join(join(expanduser("~"), "workspace"), "builds"), name)
-    print "\033[37m", name, "\033[0m",
     if exists(gp):
-        r = Repo(gp)
-        origin = r.remote()
-        hcommit_pre = r.head.commit
-        origin.fetch()
-        origin.pull()
-        hcommit_post = r.head.commit
-        if hcommit_post != hcommit_pre:
-            index = r.index
-            changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
-            print "\033[37m", changed, "\033[0m"
-        else:
-            print "\033[30mnot changed", "\033[0m"
+        try:
+            if verbose:
+                print "\033[32mPulling:", name, "\033[0m"
+
+            r = Repo(gp)
+            origin = r.remote()
+            hcommit_pre = r.head.commit
+            origin.fetch()
+            origin.pull()
+            hcommit_post = r.head.commit
+            if hcommit_post != hcommit_pre:
+                index = r.index
+                changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
+                if verbose:
+                    print "\033[34m", changed, "\033[0m"
+                return True
+            else:
+                return False
+        except GitCommandError as e:
+            print
+            print "\033[91m" + str(e), "\033[0m"
+            raise SystemExit()
+
+        return True
     else:
-        print "\033[32m", name, "\033[0m"
-        ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
-        print "\033[32m", ret, "\033[0m"
+        try:
+            if verbose:
+                print "\033[32mCloning:", name, "\033[0m"
 
-    return True
+            ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
+
+            if verbose:
+                print "\033[37m", ret, "\033[0m"
+        except GitCommandError as e:
+            print "\033[91m" + str(e), "\033[0m"
+            raise SystemExit()
+
+        return True
 
 
-def check_repos(url):
+def check_repos(folder, url, verbose=False):
     """
     @type url: str, unicode
-    @return: None
+    @type verbose: bool
+    @return: bool
     """
     name = basename(url).split(".")[0]
-    ls = url.split(":")
+    gp = join(folder, name)
+    if verbose:
+        print "\033[30musing github folder:", gp, "\033[0m"
 
-    if len(ls) > 0:
-        name = ls[1].replace("/", "_").split(".")[0]
-
-    clone_or_pull_from(url, name)
+    # if exists(gp):
+    return clone_or_pull_from(gp, url, name, verbose)
 
 
 def main():
@@ -279,15 +298,24 @@ def main():
     main
     git@github.com:erikdejonge/schema.git
     """
-    args = get_arguments(True)
-    return
+    args = get_arguments(False)
 
     while True:
-        if check_repos(posarg["giturl"]):
-            pass
+        try:
+            if check_repos(args.gitfolder, args.giturl, verbose=args.verbose):
+                if args.verbose:
+                    print "\033[32mchanged, calling:", args.cmdfolder, "\033[0m"
+            else:
+                if args.verbose:
+                    print "\033[30m"+args.giturl, "not changed\033[0m"
 
-        # if opt[""]
-        time.sleep(opts["interval"])
+        except SystemExit:
+            break
+
+        if args.once:
+            break
+
+        time.sleep(args.interval)
 
 
 if __name__ == "__main__":
