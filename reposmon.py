@@ -4,20 +4,21 @@ reposmon.py:
 Monitor a git repository, execute a command when it changes.
 
 Usage:
-    reposmon.py <giturl> <command> 
-                    [-i|--interval=<seconds>] 
-                    [-g <gitfolder>|--gitfolder=<gitfolder>] 
-                    [-c <cmdfolder>|--cmdfolder=<cmdfolder>]
+    reposmon.py [options] [--] <giturl> <command>
     reposmon.py -h | --help
 
 Options:
-  -h --help                           Show this screen.
-  -i --interval=<interval>      Seconds between checks [default: 10].
-  -g --gitfolder=<gitfolder>         Folder to check the git repos out [default: ~/workspace/reposmon].
-  -c --cmdfolder=<cmdfolder> Folder from where to run the command [default: ~/].
+  -h --help                   Show this screen.
+  -o --once                   Run only once
+  -i --interval=<interval>    Seconds between checks [default: 10].
+  -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
+  -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
 
 # coding=utf-8
+
+import os
+import yaml
 from git import Repo
 from os.path import join, expanduser, exists, basename, expanduser
 from docopt import docopt
@@ -39,8 +40,21 @@ def dictionary_for_console(argdict, indent=""):
     ls = []
 
     for k in keys:
-        s = indent + "\033[32m" + k + "\033[0m"
-        s += "\033[33m" + "`: " + str(argdict[k]) + "\033[0m\n"
+        s = indent + "\033[36m" + k + "`: " + "\033[0m"
+        v = str(argdict[k]).strip()
+        num = v.isdigit()
+        ispath = exists(v)
+        if num:
+            s += "\033[32m" + v + "\033[0m\n"
+        elif ispath:
+            s += "\033[35m" + v + "\033[0m\n"
+        elif v == "False":
+            s += "\033[31m" + v + "\033[0m\n"
+        elif v == "True":
+            s += "\033[32m" + v + "\033[0m\n"
+        else:
+            s += "\033[33m" + v + "\033[0m\n"
+
         ls.append((len(k), s))
 
         if len(k) > lk:
@@ -62,11 +76,14 @@ def sort_arguments(arguments):
     posarg = {}
 
     for k in arguments:
-        if k.startswith("pa_"):
-            posarg[k.replace("pa_", "")] = arguments[k]
+        key = k.replace("pa_", "").replace("op_", "").strip()
 
-        if k.startswith("op_"):
-            opts[k.replace("op_", "")] = arguments[k]
+        if len(key) > 0:
+            if k.startswith("pa_"):
+                posarg[k.replace("pa_", "")] = arguments[k]
+
+            if k.startswith("op_"):
+                opts[k.replace("op_", "")] = arguments[k]
 
     return opts, posarg
 
@@ -81,7 +98,7 @@ def arguments_for_console(arguments):
     newline = False
 
     if posarg:
-        s += "\033[31mPositional arguments:\033[0m\n"
+        s += "\033[91mPositional arguments:\033[0m\n"
         s += dictionary_for_console(posarg, "  ")
         newline = True
 
@@ -89,7 +106,7 @@ def arguments_for_console(arguments):
         if newline:
             s += "\n"
 
-        s += "\033[31mOptions:\033[0m\n"
+        s += "\033[91mOptions:\033[0m\n"
         s += dictionary_for_console(opts, "  ")
 
     return s.strip() + "\n"
@@ -100,6 +117,7 @@ def raise_or_exit(e, debug=False):
     @type e: Exception
     @return: None
     """
+    print "\033[31mraise_or_exit\033[0m"
     if debug:
         raise e
 
@@ -108,7 +126,51 @@ def raise_or_exit(e, debug=False):
         exit(1)
 
 
-def get_arguments(debug=False):
+class Arguments(object):
+
+    """
+    Argument dict to boject
+    """
+
+    def __init__(self, positional, options):
+        """
+        @type positional: dict
+
+        @type options: dict
+        @return: None
+        """
+        self.positional = positional.copy()
+        self.options = options.copy()
+        dictionary = positional.copy()
+        dictionary.update(options.copy())
+        self.reprdict = {}
+        self.reprdict["positional"] = positional.copy()
+        self.reprdict["options"] = options.copy()
+
+        def _traverse(key, element):
+            """
+            @type key: str, unicode
+
+            @type element: str, unicode
+            @return: None
+            """
+            if isinstance(element, dict):
+                return key, Arguments(element)
+            else:
+                return key, element
+
+        object_dict = dict(_traverse(k, v) for k, v in dictionary.iteritems())
+        self.__dict__.update(object_dict)
+
+    def __str__(self):
+        """
+        __str__
+        """
+        y = yaml.dump(self.reprdict, default_flow_style=False)
+        return "---\n" + y
+
+
+def get_arguments(debug):
     """
     parse_docopt
     """
@@ -118,6 +180,11 @@ def get_arguments(debug=False):
             if "folder" in k or "path" in k:
                 if hasattr(arguments[k], "replace"):
                     arguments[k] = arguments[k].replace("~", expanduser("~"))
+
+                    if arguments[k].strip() == ".":
+                        arguments[k] = os.getcwd()
+
+                    arguments[k] = arguments[k].rstrip("/").strip()
 
     except AttributeError as e:
         print "\033[31mAttribute error:" + k.strip(), "->", str(e), "\033[0m"
@@ -133,11 +200,12 @@ def get_arguments(debug=False):
         schema = Schema({"<command>": str,
                          "<giturl>": lambda x: ".git" in x,
                          Optional("-i"): int,
-                         Optional("--interval"): And(Use(int), error="[-i|--interval] must be an int"),
-                         Optional("--gitfolder"): And(str, exists, error='[-g|--gitfolder] should exist'),
-                         Optional("--cmdfolder"): And(str, exists, error='[-c|--cmdfolder] should exist')})
+                         Optional("--once"): Or(Use(bool), error="[-o|--once] must be a bool"),
+                         Optional("--interval"): Or(Use(int), error="[-i|--interval] must be an int"),
+                         Optional("--gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
+                         Optional("--cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
-        arguments = schema.validate(arguments)
+        # arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
     except SchemaError as e:
         if "lambda" in str(e):
@@ -153,7 +221,7 @@ def get_arguments(debug=False):
         print arguments_for_console(arguments)
 
     opts, posarg = sort_arguments(arguments)
-    return posarg, opts
+    return Arguments(posarg, opts)
 
 
 def clone_or_pull_from(remote, name):
@@ -205,9 +273,15 @@ def main():
     main
     git@github.com:erikdejonge/schema.git
     """
-    posarg, opts = get_arguments(True)
+    args = get_arguments(True)
+    return
 
-    # check_repos(arguments["giturl"])
+    while True:
+        if check_repos(posarg["giturl"]):
+            pass
+
+        # if opt[""]
+        time.sleep(opts["interval"])
 
 
 if __name__ == "__main__":
