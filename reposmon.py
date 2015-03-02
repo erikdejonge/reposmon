@@ -4,16 +4,17 @@ reposmon.py:
 Monitor a git repository, execute a command when it changes.
 
 Usage:
-    reposmon <giturl> <command>
-    [-i <interval>|--check-interval=<interval>]
-    [-g <gitfolder>|--git-folder=<gitfolder>]
-    [-c <commandfolder>|--command-folder=<commandfolder>]
+    reposmon.py <giturl> <command> 
+                    [-i|--interval=<seconds>] 
+                    [-g <gitfolder>|--gitfolder=<gitfolder>] 
+                    [-c <cmdfolder>|--cmdfolder=<cmdfolder>]
+    reposmon.py -h | --help
 
 Options:
   -h --help                           Show this screen.
-  -i --check-interval=<interval>      Seconds between checks [default: 10].
-  -g --git-folder=<gitfolder>         Folder to check the git repos out [default: ~/workspace/reposmon].
-  -c --command-folder=<commandfolder> Folder from where to run the command [default: ~/].
+  -i --interval=<interval>      Seconds between checks [default: 10].
+  -g --gitfolder=<gitfolder>         Folder to check the git repos out [default: ~/workspace/reposmon].
+  -c --cmdfolder=<cmdfolder> Folder from where to run the command [default: ~/].
 """
 
 # coding=utf-8
@@ -132,9 +133,9 @@ def get_arguments(debug=False):
         schema = Schema({"<command>": str,
                          "<giturl>": lambda x: ".git" in x,
                          Optional("-i"): int,
-                         Optional("--check-interval"): And(Use(int), error="[-i|--check-interval] must be an int"),
-                         Optional("--git-folder"): And(str, exists, error='[-g|--git-folder] should exist'),
-                         Optional("--command-folder"): And(str, exists, error='[-c|--command-folder] should exist')})
+                         Optional("--interval"): And(Use(int), error="[-i|--interval] must be an int"),
+                         Optional("--gitfolder"): And(str, exists, error='[-g|--gitfolder] should exist'),
+                         Optional("--cmdfolder"): And(str, exists, error='[-c|--cmdfolder] should exist')})
 
         arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
