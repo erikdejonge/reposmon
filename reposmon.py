@@ -298,49 +298,53 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
     @type verbose: bool
     @return: None
     """
-    if exists(gp):
-        try:
-            if verbose:
-                print "\033[32mPulling:", name, "\033[0m"
-
-            r = Repo(gp)
-            origin = r.remote()
-            if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
-                raise SystemExit("Different remote url: " + str(remote) + "\n                       " + origin.config_reader.config.get_value('remote "origin"', "url"))
-
-            hcommit_pre = r.head.commit
-            origin.fetch()
-            origin.pull()
-            hcommit_post = r.head.commit
-            if hcommit_post != hcommit_pre:
-                index = r.index
-                changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
-
+    try:
+        if exists(gp):
+            try:
                 if verbose:
-                    print "\033[34m", changed, "\033[0m"
-
-                return True
-            else:
-                return False
-        except GitCommandError as e:
-            print
-            print "\033[91m" + str(e), "\033[0m"
-            raise SystemExit(e)
-    else:
-        try:
-            if verbose:
-                print "\033[32mCloning:", name, "\033[0m"
-
-            ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
-
-            if verbose:
-                print "\033[37m", ret, "\033[0m"
-        except GitCommandError as e:
-            print "\033[91m" + str(e), "\033[0m"
-            raise SystemExit(e)
-
-        return True
-
+                    print "\033[32mPulling:", name, "\033[0m"
+    
+                r = Repo(gp)
+                origin = r.remote()
+                if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
+                    raise SystemExit("Different remote url: " + str(remote) + "\n                       " + origin.config_reader.config.get_value('remote "origin"', "url"))
+    
+                hcommit_pre = r.head.commit
+                origin.fetch()
+                origin.pull()
+                hcommit_post = r.head.commit
+                if hcommit_post != hcommit_pre:
+                    index = r.index
+                    changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
+    
+                    if verbose:
+                        print "\033[34m", changed, "\033[0m"
+    
+                    return True
+                else:
+                    return False
+            except GitCommandError as e:
+                print
+                print "\033[91m" + str(e), "\033[0m"
+                raise SystemExit(e)
+        
+        else:
+            try:
+                if verbose:
+                    print "\033[32mCloning:", name, "\033[0m"
+    
+                ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
+    
+                if verbose:
+                    print "\033[37m", ret, "\033[0m"
+            except GitCommandError as e:
+                print "\033[91m" + str(e), "\033[0m"
+                raise SystemExit(e)
+    
+            return True
+    except AssertionError, e:
+        print "\033[31m", e, "\033[0m"
+        return False
 
 def check_repos(folder, url, verbose=False):
     """
