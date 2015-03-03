@@ -398,8 +398,9 @@ def main():
     lockfile = join(expanduser("~"), "reposmon.pid")
     try:
         if not exists(lockfile):
+            fh = open(lockfile, "w")
             fh.write(str(os.getpid()))
-            fh.flush()
+            fh.close()
             arguments = get_arguments(True)
 
             while True:
@@ -426,8 +427,7 @@ def main():
             print "\033[91m", e, "\033[0m"
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
-    except portalocker.utils.AlreadyLocked:
-        print "\033[31mAlready running\033[0m"
+
     finally:
         if exists(lockfile):
             os.remove(lockfile)
