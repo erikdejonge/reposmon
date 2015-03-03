@@ -400,6 +400,7 @@ def main():
     git@github.com:erikdejonge/schema.git
     """
     lockfile = join(expanduser("~"), "reposmon.pid")
+    print "\033[95m" + lockfile + "\033[0m"
     try:
         if not exists(lockfile):
             fh = open(lockfile, "w")
