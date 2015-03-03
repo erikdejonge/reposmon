@@ -1,3 +1,4 @@
+#!/usr/bin/env python 
 # coding=utf-8
 """
 reposmon.py
@@ -17,7 +18,7 @@ Options:
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
 
-# coding=utf-8
+
 
 import os
 import time
