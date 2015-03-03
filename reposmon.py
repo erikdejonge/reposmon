@@ -21,6 +21,7 @@ import os
 import time
 import subprocess
 import yaml
+import psutil
 from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
@@ -53,9 +54,9 @@ def colorize_for_print(v):
 
     ispath = exists(v)
 
-    if num:
-        s += "\033[96m" + v + "\033[0m"
-    elif ispath:
+    if num is True:
+        s += "\033[93m" + v + "\033[0m"
+    elif ispath is True:
         s += "\033[35m" + v + "\033[0m"
     elif v == "False":
         s += "\033[31m" + v + "\033[0m"
@@ -112,6 +113,17 @@ def sort_arguments(arguments):
 
             if k.startswith("op_"):
                 opts[k.replace("op_", "")] = arguments[k]
+        try:
+            possnum = arguments[k]
+
+            if isinstance(possnum, str):
+                if "." in possnum:
+                    arguments[k] = float(possnum)
+                else:
+                    arguments[k] = int(possnum)
+
+        except ValueError:
+            pass
 
     return opts, posarg
 
@@ -195,6 +207,15 @@ class Arguments(object):
         @type options: dict
         @return: None
         """
+        self.once = None
+        self.command = None
+        self.giturl = None
+        self.cmdfolder = None
+        self.verbose = None
+        self.giturl = None
+        self.gitfolder = None
+        self.interval = None
+        self.verbose = None
         dictionary = {}
 
         if positional and options:
@@ -203,7 +224,6 @@ class Arguments(object):
             dictionary = positional.copy()
             dictionary.update(options.copy())
             self.reprdict = {"positional": positional.copy(),
-
                              "options": options.copy()}
 
         elif yamlfile:
@@ -231,9 +251,10 @@ class Arguments(object):
         return get_print_yaml("---\n" + y)
 
 
-def get_arguments(verbose):
+def get_arguments(verbose, validate_schema=True):
     """
     @type verbose: bool
+    @type schema: bool
     @return: None
     """
     arguments = dict(docopt(__doc__, version='0.1'))
@@ -271,7 +292,9 @@ def get_arguments(verbose):
                          Optional("--cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
         del arguments["--"]
-        arguments = schema.validate(arguments)
+        if validate_schema is True:
+            arguments = schema.validate(arguments)
+
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
     except SchemaError as e:
         if "lambda" in str(e):
@@ -343,7 +366,6 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
             return True
     except AssertionError as e:
         print "\033[31m", e, "\033[0m"
-        raise
         return False
 
 
@@ -395,35 +417,101 @@ def call_command(command, cmdfolder, verbose=False):
         print e
 
 
-# noinspection PyUnresolvedReferences
+def running_write_lockfile(lockfile, verbose=False):
+    """
+    @type lockfile: str, unicode
+    @return: None
+    """
+    fh = open(lockfile, "w")
+    fh.write(str(os.getpid()))
+    fh.close()
+
+    if verbose is True:
+        print "\033[32m" + str(os.getpid()) + "\033[0m"
+
+
+def running_lockfile_name():
+    """
+    running_lockfile_name
+    """
+    lockfile = join(expanduser("~"), __file__ + ".pid")
+    return lockfile
+
+
+def running_remove_lockfile(name):
+    """
+    @type name: str, unicode
+    @return: None
+    """
+    if exists(name):
+        if int(open(name).read()) == os.getpid():
+            os.remove(name)
+
+
+def running_check_lockfile(name, verbose=False):
+    """
+    @type name: str, unicode
+    @return: None
+    """
+    running = False
+
+    if exists(name):
+        pid = int(open(name).read().strip())
+        cmdline = None
+
+        for p in psutil.process_iter():
+            if p.pid == pid:
+                cmdline = " ".join(p.as_dict()["cmdline"])
+
+                if __file__ in str(cmdline):
+                    running = True
+
+        if running is False:
+            os.remove(name)
+
+        if verbose is True and cmdline is not None and running is False:
+            print "\033[91mAnother type proc found:", pid, "\033[0m"
+
+        if verbose is True:
+            if running is True:
+                print "\033[91mAnother instance found:", pid, "\033[0m"
+
+    return running
+
+
+def main_loop(arguments):
+    """
+    @type arguments: Arguments
+    @return: None
+    """
+    while True:
+        if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
+            if arguments.verbose:
+                print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
+
+            call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
+        else:
+            if arguments.verbose:
+                print "\033[30m" + arguments.giturl, "not changed\033[0m"
+
+        if arguments.once:
+            break
+
+        time.sleep(arguments.interval)
+
+
 def main():
     """
     git@github.com:erikdejonge/schema.git
     """
-    lockfile = join(expanduser("~"), "reposmon.pid")
-    print "\033[95m" + lockfile + "\033[0m"
+    lockfile = running_lockfile_name()
     try:
-        if not exists(lockfile):
-            fh = open(lockfile, "w")
-            fh.write(str(os.getpid()))
-            fh.close()
-            arguments = get_arguments(True)
+        schemaless_arguments = get_arguments(False, validate_schema=False)
 
-            while True:
-                if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
-                    if arguments.verbose:
-                        print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
-
-                    call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
-                else:
-                    if arguments.verbose:
-                        print "\033[30m" + arguments.giturl, "not changed\033[0m"
-
-                if arguments.once:
-                    break
-
-                time.sleep(arguments.interval)
-
+        if running_check_lockfile(lockfile, schemaless_arguments.verbose) is False:
+            arguments = get_arguments(schemaless_arguments.verbose)
+            running_write_lockfile(lockfile, arguments.verbose)
+            main_loop(arguments)
     except SystemExit as e:
         e = str(e).strip()
 
@@ -434,9 +522,7 @@ def main():
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
     finally:
-        if exists(lockfile):
-            if int(open(lockfile).read()) == os.getpid():
-                os.remove(lockfile)
+        running_remove_lockfile(lockfile)
 
 
 if __name__ == "__main__":

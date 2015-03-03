@@ -2,3 +2,4 @@ schema
 GitPython
 pyyaml
 docopt
+psutil
