@@ -1,0 +1,5 @@
+schema
+portalocker
+GitPython
+yaml
+docopt

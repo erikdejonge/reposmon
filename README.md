@@ -11,8 +11,12 @@ For example
     * Push to registry
     
 
+###requirementes
+```bash
+pip install -r requirements.txt
+```
+
 ###use
-      
 ```
 python reposmon.py <giturl> <bashcmd> [-i|--check-interval] [-d|--git-directory] [-f|--command-directory]
 ```
