@@ -426,8 +426,6 @@ def main():
             print "\033[91m", e, "\033[0m"
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
-    except portalocker.utils.AlreadyLocked:
-        print "\033[31mAlready running\033[0m"
     finally:
         if exists(lockfile):
             os.remove(lockfile)
