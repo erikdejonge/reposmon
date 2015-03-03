@@ -11,7 +11,7 @@ Options:
   -h --help                   Show this screen.
   -o --once                   Run only once
   -v --verbose                Verbose mode
-  -i --interval=<interval>    Seconds between checks [default: 10].
+  -i --interval=<interval>    Seconds between checks [default: 60].
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
@@ -20,12 +20,13 @@ Options:
 
 import os
 import time
-from os.path import join, exists, basename, expanduser
-
+import portalocker
+import subprocess
 import yaml
 from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
+from os.path import join, exists, basename, expanduser
 
 
 def colorize_for_print(v):
@@ -127,18 +128,18 @@ def arguments_for_console(arguments):
     newline = False
 
     if posarg:
-        s += "\033[91mPositional arguments:\033[0m\n"
-        s += dictionary_for_console(posarg, "  ")
+        s += "\033[91mPositional arguments:\033[0m"
+        s += dictionary_for_console(posarg, "\n  ")
         newline = True
 
     if opts:
         if newline:
-            s += "\n"
+            s += "\n\n"
 
-        s += "\033[91mOptions:\033[0m\n"
-        s += dictionary_for_console(opts, "  ")
+        s += "\033[91mOptions:\033[0m"
+        s += dictionary_for_console(opts, "\n  ")
 
-    return s.strip() + "\n"
+    return s + "\n"
 
 
 def raise_or_exit(e, debug=False):
@@ -264,11 +265,14 @@ def get_arguments(verbose):
         schema = Schema({"<command>": str,
                          "<giturl>": lambda x: ".git" in x,
                          Optional("-i"): int,
+                         Optional("--help"): Or(Use(bool), error="[-h|--help] must be a bool"),
+                         Optional("--verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
                          Optional("--once"): Or(Use(bool), error="[-o|--once] must be a bool"),
                          Optional("--interval"): Or(Use(int), error="[-i|--interval] must be an int"),
                          Optional("--gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
                          Optional("--cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
+        del arguments["--"]
         arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
     except SchemaError as e:
@@ -304,7 +308,7 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
             r = Repo(gp)
             origin = r.remote()
             if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
-                raise SystemExit("different remote url")
+                raise SystemExit("Different remote url: " + str(remote) + "\n                       " + origin.config_reader.config.get_value('remote "origin"', "url"))
 
             hcommit_pre = r.head.commit
             origin.fetch()
@@ -357,34 +361,80 @@ def check_repos(folder, url, verbose=False):
     return clone_or_pull_from(gp, url, name, verbose)
 
 
+def call_command(command, cmdfolder, verbose=False):
+    """
+    @type command: str, unicode
+    @type cmdfolder: str, unicode
+    @type verbose: bool
+    @return: None
+    """
+    try:
+        proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
+
+
+        if verbose:
+            while proc.poll() is None:
+                output = proc.stdout.readline()
+
+                if len(output.strip()) > 0:
+                    print "\033[30m", output, "\033[0m",
+        else:
+            if proc.returncode != 0 or verbose:
+                print "command:"
+                print so
+                print se
+    except OSError as e:
+        print e
+    except ValueError as e:
+        print e
+    except subprocess.CalledProcessError as e:
+        print e
+
+
 # noinspection PyUnresolvedReferences
 def main():
     """
     git@github.com:erikdejonge/schema.git
     """
     try:
-        arguments = get_arguments(False)
-        print arguments
 
-        while True:
-            if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
-                if arguments.verbose:
-                    print "\033[32mchanged, calling:", arguments.cmdfolder, "\033[0m"
-            else:
-                if arguments.verbose:
-                    print "\033[30m" + arguments.giturl, "not changed\033[0m"
+        with portalocker.Lock('reposmon.pid', timeout=1) as fh:
+            fh.write(str(os.getpid()))
+            fh.flush()
+            arguments = get_arguments(True)
+            call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
+            return
+            while True:
+                if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
+                    if arguments.verbose:
+                        print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
 
-            if arguments.once:
-                break
+                    call_command(arguments.command, arguments.cmdfolder)
+                else:
+                    if arguments.verbose:
+                        print "\033[30m" + arguments.giturl, "not changed\033[0m"
 
-            time.sleep(arguments.interval)
+                if arguments.once:
+                    break
+
+                time.sleep(arguments.interval)
+
     except SystemExit as e:
         e = str(e).strip()
-
+        print "\033[31mSystemExit:\033[0m"
         if "Usage:" in e:
-            print "\033[33mSystemExit exception:\n", e, "\033[0m"
+            print "\033[33m", e, "\033[0m"
         else:
-            print "\033[31mSystemExit exception:\n", e, "\033[0m"
+            print "\033[91m", e, "\033[0m"
+    except KeyboardInterrupt:
+        print "\n\033[33mbye\033[0m"
+    except portalocker.utils.AlreadyLocked:
+        print "\033[31mAlready running\033[0m"
+    finally:
+        rmf = "reposmon.pid"
+
+        if exists(rmf):
+            os.remove(rmf)
 
 
 if __name__ == "__main__":
