@@ -19,12 +19,53 @@ Options:
 # coding=utf-8
 
 import os
+import time
+from os.path import join, exists, basename, expanduser
+
 import yaml
 from git import Repo, GitCommandError
-from os.path import join, expanduser, exists, basename, expanduser
 from docopt import docopt
-from schema import Schema, SchemaError, Or, Optional, And, Use
-from subprocess import call
+from schema import Schema, SchemaError, Or, Optional, Use
+
+
+def colorize_for_print(v):
+    """
+    @type v: str, unicode
+    @return: None
+    """
+    s = ""
+    v = v.strip()
+
+    if v == "false":
+        v = "False"
+    elif v == "true":
+        v = "True"
+
+    num = v.isdigit()
+
+    if not num:
+        try:
+            v2 = v.replace("'", "").replace('"', "")
+            num = float(v2)
+            num = True
+            v = v2
+        except ValueError:
+            pass
+
+    ispath = exists(v)
+
+    if num:
+        s += "\033[96m" + v + "\033[0m"
+    elif ispath:
+        s += "\033[35m" + v + "\033[0m"
+    elif v == "False":
+        s += "\033[31m" + v + "\033[0m"
+    elif v == "True":
+        s += "\033[32m" + v + "\033[0m"
+    else:
+        s += "\033[33m" + v + "\033[0m"
+
+    return s
 
 
 def dictionary_for_console(argdict, indent=""):
@@ -42,20 +83,7 @@ def dictionary_for_console(argdict, indent=""):
     for k in keys:
         s = indent + "\033[36m" + k + "`: " + "\033[0m"
         v = str(argdict[k]).strip()
-        num = v.isdigit()
-        ispath = exists(v)
-
-        if num:
-            s += "\033[96m" + v + "\033[0m\n"
-        elif ispath:
-            s += "\033[35m" + v + "\033[0m\n"
-        elif v == "False":
-            s += "\033[31m" + v + "\033[0m\n"
-        elif v == "True":
-            s += "\033[32m" + v + "\033[0m\n"
-        else:
-            s += "\033[33m" + v + "\033[0m\n"
-
+        s += colorize_for_print(v)
         ls.append((len(k), s))
 
         if len(k) > lk:
@@ -115,16 +143,45 @@ def arguments_for_console(arguments):
 
 def raise_or_exit(e, debug=False):
     """
-    @type e: Exception
+    @type e: str, unicode
+    @type debug: bool
     @return: None
     """
     print "\033[31mraise_or_exit\033[0m"
     if debug:
         raise e
-
-        exit(1)
     else:
         exit(1)
+
+
+def get_print_yaml(yamlstring):
+    """
+    @type yamlstring: str, unicode
+    @return: None
+    """
+    s = ""
+
+    for i in yamlstring.split("\n"):
+        ls = [x for x in i.split(":") if x]
+        cnt = 0
+
+        if len(ls) > 1:
+            for ii in ls:
+                if cnt == 0:
+                    s += "\033[36m" + ii + ": " + "\033[0m"
+                else:
+                    s += colorize_for_print(ii)
+
+                cnt += 1
+        else:
+            if i.strip().startswith("---"):
+                s += "\033[95m" + i + "\033[0m"
+            else:
+                s += "\033[91m" + i + "\033[0m"
+
+        s += "\n"
+
+    return s.strip()
 
 
 class Arguments(object):
@@ -146,9 +203,10 @@ class Arguments(object):
             self.options = options.copy()
             dictionary = positional.copy()
             dictionary.update(options.copy())
-            self.reprdict = {}
-            self.reprdict["positional"] = positional.copy()
-            self.reprdict["options"] = options.copy()
+            self.reprdict = {"positional": positional.copy(),
+
+                             "options": options.copy()}
+
         elif yamlfile:
             raise AssertionError("not implemented")
 
@@ -171,15 +229,16 @@ class Arguments(object):
         __str__
         """
         y = yaml.dump(self.reprdict, default_flow_style=False)
-        return "---\n" + y
+        return get_print_yaml("---\n" + y)
 
 
-def get_arguments(debug):
+def get_arguments(verbose):
     """
-    parse_docopt
+    @type verbose: bool
+    @return: None
     """
-    verbose = debug
     arguments = dict(docopt(__doc__, version='0.1'))
+    k = ""
     try:
         for k in arguments:
             if "folder" in k or "path" in k:
@@ -199,7 +258,7 @@ def get_arguments(debug):
             print "\033[30m", k.strip() + "\033[0m",
 
         print
-        raise_or_exit(e, debug)
+        raise_or_exit(e, verbose)
 
     try:
         schema = Schema({"<command>": str,
@@ -210,7 +269,7 @@ def get_arguments(debug):
                          Optional("--gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
                          Optional("--cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
-        # arguments = schema.validate(arguments)
+        arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
     except SchemaError as e:
         if "lambda" in str(e):
@@ -220,9 +279,9 @@ def get_arguments(debug):
 
         print "\033[31m" + err.strip() + "\033[0m"
         print __doc__
-        raise_or_exit(e, debug)
+        raise_or_exit(e, verbose)
 
-    if debug:
+    if verbose:
         print arguments_for_console(arguments)
 
     opts, posarg = sort_arguments(arguments)
@@ -243,7 +302,6 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
                 print "\033[32mPulling:", name, "\033[0m"
 
             r = Repo(gp)
-            config = r.config_reader()
             origin = r.remote()
             if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
                 raise SystemExit("different remote url")
@@ -265,9 +323,7 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
         except GitCommandError as e:
             print
             print "\033[91m" + str(e), "\033[0m"
-            raise SystemExit()
-
-        return True
+            raise SystemExit(e)
     else:
         try:
             if verbose:
@@ -279,16 +335,17 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
                 print "\033[37m", ret, "\033[0m"
         except GitCommandError as e:
             print "\033[91m" + str(e), "\033[0m"
-            raise SystemExit()
+            raise SystemExit(e)
 
         return True
 
 
 def check_repos(folder, url, verbose=False):
     """
+    @type folder: str, unicode
     @type url: str, unicode
     @type verbose: bool
-    @return: bool
+    @return: None
     """
     name = basename(url).split(".")[0]
     gp = join(folder, name)
@@ -300,30 +357,35 @@ def check_repos(folder, url, verbose=False):
     return clone_or_pull_from(gp, url, name, verbose)
 
 
+# noinspection PyUnresolvedReferences
 def main():
     """
-    main
     git@github.com:erikdejonge/schema.git
     """
     try:
-        args = get_arguments(False)
+        arguments = get_arguments(False)
+        print arguments
 
         while True:
-            if check_repos(args.gitfolder, args.giturl, verbose=args.verbose):
-                if args.verbose:
-                    print "\033[32mchanged, calling:", args.cmdfolder, "\033[0m"
+            if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
+                if arguments.verbose:
+                    print "\033[32mchanged, calling:", arguments.cmdfolder, "\033[0m"
             else:
-                if args.verbose:
-                    print "\033[30m" + args.giturl, "not changed\033[0m"
+                if arguments.verbose:
+                    print "\033[30m" + arguments.giturl, "not changed\033[0m"
 
-            if args.once:
+            if arguments.once:
                 break
 
-            time.sleep(args.interval)
+            time.sleep(arguments.interval)
     except SystemExit as e:
-        print "\033[31mSystemExit exception:", e, "\033[0m"
+        e = str(e).strip()
+
+        if "Usage:" in e:
+            print "\033[33mSystemExit exception:\n", e, "\033[0m"
+        else:
+            print "\033[31mSystemExit exception:\n", e, "\033[0m"
 
 
 if __name__ == "__main__":
-
     main()
