@@ -379,6 +379,7 @@ def call_command(command, cmdfolder, verbose=False):
                 if len(output.strip()) > 0:
                     print "\033[30m", output, "\033[0m",
         else:
+            so, se = proc.communicate()
             if proc.returncode != 0 or verbose:
                 print "command:"
                 print so
