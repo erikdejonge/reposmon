@@ -19,7 +19,6 @@ Options:
 
 import os
 import time
-import portalocker
 import subprocess
 import yaml
 from git import Repo, GitCommandError
@@ -398,7 +397,7 @@ def main():
     """
     lockfile = join(expanduser("~"), "reposmon.pid")
     try:
-        with portalocker.Lock(lockfile, timeout=1) as fh:
+        if not exists(lockfile):
             fh.write(str(os.getpid()))
             fh.flush()
             arguments = get_arguments(True)

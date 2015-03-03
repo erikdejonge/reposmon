@@ -1,5 +1,4 @@
 schema
-portalocker
 GitPython
 pyyaml
 docopt
