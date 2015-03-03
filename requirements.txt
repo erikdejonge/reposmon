@@ -1,5 +1,5 @@
 schema
 portalocker
 GitPython
-yaml
+pyyaml
 docopt
