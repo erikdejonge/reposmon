@@ -254,7 +254,7 @@ class Arguments(object):
 def get_arguments(verbose, validate_schema=True):
     """
     @type verbose: bool
-    @type schema: bool
+    @type validate_schema: bool
     @return: None
     """
     arguments = dict(docopt(__doc__, version='0.1'))
@@ -420,6 +420,7 @@ def call_command(command, cmdfolder, verbose=False):
 def running_write_lockfile(lockfile, verbose=False):
     """
     @type lockfile: str, unicode
+    @type verbose: bool
     @return: None
     """
     fh = open(lockfile, "w")
@@ -451,6 +452,7 @@ def running_remove_lockfile(name):
 def running_check_lockfile(name, verbose=False):
     """
     @type name: str, unicode
+    @type verbose: bool
     @return: None
     """
     running = False
