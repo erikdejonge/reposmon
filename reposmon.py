@@ -343,6 +343,7 @@ def clone_or_pull_from(gp, remote, name, verbose=False):
             return True
     except AssertionError as e:
         print "\033[31m", e, "\033[0m"
+        raise
         return False
 
 
