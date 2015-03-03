@@ -276,6 +276,7 @@ def get_arguments(verbose):
         del arguments["--"]
         arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
+        
     except SchemaError as e:
         if "lambda" in str(e):
             err = "Error: giturl should end with .git"
@@ -404,14 +405,13 @@ def main():
             fh.write(str(os.getpid()))
             fh.flush()
             arguments = get_arguments(True)
-            call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
-            return
+
             while True:
                 if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
                     if arguments.verbose:
                         print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
 
-                    call_command(arguments.command, arguments.cmdfolder)
+                    call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
                 else:
                     if arguments.verbose:
                         print "\033[30m" + arguments.giturl, "not changed\033[0m"
