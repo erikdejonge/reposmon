@@ -422,10 +422,11 @@ def main():
 
     except SystemExit as e:
         e = str(e).strip()
-        print "\033[31mSystemExit:\033[0m"
-        if "Usage:" in e:
+        
+        if "Options:" in e:
             print "\033[33m", e, "\033[0m"
         else:
+            print "\033[31mSystemExit:\033[0m"
             print "\033[91m", e, "\033[0m"
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
