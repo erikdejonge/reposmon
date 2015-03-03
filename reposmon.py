@@ -1,8 +1,7 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 # coding=utf-8
 """
 reposmon.py
-
 Monitor a git repository, execute a command when it changes.
 
 Usage:
@@ -17,8 +16,6 @@ Options:
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
-
-
 
 import os
 import time
@@ -277,7 +274,6 @@ def get_arguments(verbose):
         del arguments["--"]
         arguments = schema.validate(arguments)
         arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
-        
     except SchemaError as e:
         if "lambda" in str(e):
             err = "Error: giturl should end with .git"
@@ -374,7 +370,6 @@ def call_command(command, cmdfolder, verbose=False):
     try:
         proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
 
-
         if verbose:
             while proc.poll() is None:
                 output = proc.stdout.readline()
@@ -387,6 +382,7 @@ def call_command(command, cmdfolder, verbose=False):
                 print "command:"
                 print so
                 print se
+
     except OSError as e:
         print e
     except ValueError as e:
@@ -400,9 +396,9 @@ def main():
     """
     git@github.com:erikdejonge/schema.git
     """
+    lockfile = join(expanduser("~"), "reposmon.pid")
     try:
-
-        with portalocker.Lock('reposmon.pid', timeout=1) as fh:
+        with portalocker.Lock(lockfile, timeout=1) as fh:
             fh.write(str(os.getpid()))
             fh.flush()
             arguments = get_arguments(True)
@@ -424,7 +420,7 @@ def main():
 
     except SystemExit as e:
         e = str(e).strip()
-        
+
         if "Options:" in e:
             print "\033[33m", e, "\033[0m"
         else:
@@ -434,10 +430,8 @@ def main():
     except portalocker.utils.AlreadyLocked:
         print "\033[31mAlready running\033[0m"
     finally:
-        rmf = "reposmon.pid"
-
-        if exists(rmf):
-            os.remove(rmf)
+        if exists(lockfile):
+            os.remove(lockfile)
 
 
 if __name__ == "__main__":
