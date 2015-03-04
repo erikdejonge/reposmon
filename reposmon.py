@@ -32,7 +32,7 @@ from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
 from os.path import join, exists, basename, expanduser
-
+from pyprofiler import start_profile, end_profile
 
 def raise_or_exit(e, debug=False):
     """
@@ -619,4 +619,8 @@ def main():
 
 
 if __name__ == "__main__":
+    profiler = start_profile()
     main()
+    end_profile(profiler)
+
+
