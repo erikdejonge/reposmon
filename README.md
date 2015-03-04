@@ -1,6 +1,6 @@
 
 # reposmon
-Monitor a git repository, execute a command when it changes.
+Monitor a git repository, execute a command when it changes. Basically a polling git-hook for pull.
 
 ###purpose
 Execute a chain of command when a git-repository changes
