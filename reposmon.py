@@ -458,6 +458,8 @@ def call_command(command, cmdfolder, verbose=False):
     @return: None
     """
     try:
+        if verbose:
+            print "\033[36m", cmdfolder, command, "\033[0m"
         proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
 
         if verbose:
