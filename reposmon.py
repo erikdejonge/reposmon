@@ -429,6 +429,8 @@ class GitRepos(object):
         except AssertionError as e:
             print "\033[31m", e, "\033[0m"
             return False
+        except KeyboardInterrupt:
+            raise
         except BaseException as e:
             print "\033[31m", e, "\033[0m"
             return False
