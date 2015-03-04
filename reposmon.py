@@ -10,41 +10,28 @@ Usage:
 
 Options:
   -h --help                   Show this screen.
-  -o --once                   Run only once
-  -v --verbose                Verbose mode
-  -w --write=<writeymlpath>   Write arguments yaml file
-  -l --load=<loadymlpath>     Load arguments yaml file
+  -o --once                   Run only once.
+  -v --verbose                Verbose mode.
+  -w --write=<writeymlpath>   Write arguments yaml file.
+  -l --load=<loadymlpath>     Load arguments yaml file.
   -i --interval=<interval>    Seconds between checks [default: 60].
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
-# Erik de Jonge
-# erik@a8.nl
-# license: gpl2
-
+#
+# erik@a8.nl (04-03-15)
+# license: GNU-GPL2
+#
 import os
 import time
 import subprocess
 import yaml
-import psutil
-import hashlib
 from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
 from os.path import join, exists, basename, expanduser
 from pyprofiler import start_profile, end_profile
-
-def raise_or_exit(e, debug=False):
-    """
-    @type e: str, unicode
-    @type debug: bool
-    @return: None
-    """
-    print "\033[31mraise_or_exit\033[0m"
-    if debug:
-        raise e
-    else:
-        exit(1)
+from appinstance import AppInstance, AppInstanceRunning
 
 
 class Arguments(object):
@@ -285,9 +272,7 @@ class Arguments(object):
 
                 for k in arguments:
                     print "\033[30m", k.strip() + "\033[0m",
-
-                print
-                raise_or_exit(e, self.verbose)
+                raise e
         else:
             loaded_arguments = yaml.load(open(self.load))
             arguments = {}
@@ -296,8 +281,8 @@ class Arguments(object):
             for k in loaded_arguments["positional"]:
                 arguments["pa_" + k] = loaded_arguments["positional"][k]
         try:
-            schema = Schema({"pa_command": str,
-                             "pa_giturl": lambda x: ".git" in x,
+            schema = Schema({"pa_command": Or(None, str),
+                             "pa_giturl": Or(None, lambda x: ".git" in x),
                              Optional("-i"): int,
                              Optional("op_help"): Or(Use(bool), error="[-h|--help] must be a bool"),
                              Optional("op_verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
@@ -322,8 +307,7 @@ class Arguments(object):
                 err = str(e)
 
             print "\033[31m" + err.strip() + "\033[0m"
-            print __doc__
-            raise_or_exit(e, self.verbose)
+            raise e
 
         if self.verbose:
             print self.arguments_for_console(arguments)
@@ -376,88 +360,6 @@ class Arguments(object):
         @return: None
         """
         self.reprdict = yaml.load(yamldata)
-
-
-class AppInstanceRunning(AssertionError):
-    """
-    @type AssertionError: str, unicode
-    @return: None
-    """
-    pass
-
-
-class AppInstance(object):
-    """
-    Lockfile
-    """
-    def __init__(self, arguments=None, verbose=False):
-        """
-        @type arguments: str, unicode
-        @type verbose: bool
-        @return: None
-        """
-        self.verbose = verbose
-        self.arguments = arguments
-        name = basename(__file__).split(".")[0]
-
-        if arguments is None:
-            self.lockfile = join(expanduser("~"), "." + name + ".pid")
-        else:
-            lfname = hashlib.md5(basename(__file__) + arguments).hexdigest()
-            self.lockfile = join(expanduser("~"), "." + name + "_" + lfname + ".pid")
-
-    def __exit__(self, t, value, traceback):
-        """
-        @type t: str, unicode
-        @type value: str, unicode
-        @type traceback: str, unicode
-        @return: None
-        """
-        print "\033[92m", t, "\033[0m"
-        print "\033[93m", value, "\033[0m"
-        print "\033[94m", traceback, "\033[0m"
-        if os.path.exists(self.lockfile):
-            if int(open(self.lockfile).read()) == os.getpid():
-                os.remove(self.lockfile)
-
-    def __enter__(self):
-        """
-        __enter__
-        """
-        running = False
-
-        if exists(self.lockfile):
-            pid = int(open(self.lockfile).read().strip())
-            cmdline = None
-
-            for p in psutil.process_iter():
-                if p.pid == pid:
-                    cmdline = " ".join(p.as_dict()["cmdline"])
-
-                    if __file__ in str(cmdline):
-                        running = True
-
-            if running is False:
-                os.remove(self.lockfile)
-
-            if self.verbose is True and cmdline is not None and running is False:
-                print "\033[91mAnother type proc found:", pid, "\033[0m"
-
-            if self.verbose is True:
-                if running is True:
-                    print "\033[91mAnother instance found:", pid, "\033[0m"
-
-        if not running:
-            fh = open(self.lockfile, "w")
-            fh.write(str(os.getpid()))
-            fh.close()
-
-            if self.verbose is True:
-                print "\033[32m" + self.lockfile, str(os.getpid()) + "\033[0m"
-        else:
-            raise AppInstanceRunning(self.lockfile)
-
-        return running
 
 
 class GitRepos(object):
@@ -563,6 +465,10 @@ def call_command(command, cmdfolder, verbose=False):
                 print so
                 print se
 
+            fout = open(join(cmdfolder, "reposmon.out"), "w")
+            fout.write(so)
+            fout.write(se)
+            fout.close()
     except OSError as e:
         print e
     except ValueError as e:
@@ -600,10 +506,16 @@ def main():
     """
     arguments = Arguments(verbose=False, validate_schema=False)
     try:
-        with AppInstance(arguments=arguments.command + arguments.giturl):
-            print "running"
+        argstring = ""
+
+        if arguments.command and arguments.giturl:
+            argstring = str(arguments.command) + str(arguments.giturl)
+        with AppInstance(arguments=argstring):
             arguments.parse_args()
-            main_loop(arguments)
+
+            if arguments.giturl and arguments.command:
+                main_loop(arguments)
+
     except SystemExit as e:
         e = str(e).strip()
 
@@ -613,14 +525,13 @@ def main():
             print "\033[91m", e, "\033[0m"
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
+    except SchemaError:
+        pass
+
     except AppInstanceRunning:
         if arguments.verbose:
             print "\033[31minstance runs already\033[0m"
 
 
 if __name__ == "__main__":
-    profiler = start_profile()
     main()
-    end_profile(profiler)
-
-
