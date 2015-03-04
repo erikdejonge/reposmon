@@ -2,6 +2,7 @@
 # coding=utf-8
 """
 reposmon.py
+
 Monitor a git repository, execute a command when it changes.
 
 Usage:
