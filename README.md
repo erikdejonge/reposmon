@@ -53,10 +53,10 @@ alias reposmon="#/usr/bin/env python ~/[...]/reposmon/reposmon.py
 install alias with a workspace checkout of reposmon:
 
 ```bash
-echo alias reposmon=\"#/usr/bin/env python ~/workspace/reposmon/reposmon.py\" >> ~/.bash_profile
+alias reposmon="#/usr/bin/env python /Users/rabshakeh/workspace/reposmon/reposmon.py"
 ```
 
-#####sort aliases on osx
+#####commit and sort aliases on osx
 On osx the sortalias command sorts all aliasses in .bash_profile
 
 ```bash
