@@ -30,7 +30,6 @@ from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
 from os.path import join, exists, basename, expanduser
-from pyprofiler import start_profile, end_profile
 from appinstance import AppInstance, AppInstanceRunning
 
 
