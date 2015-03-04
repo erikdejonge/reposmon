@@ -5,17 +5,22 @@ reposmon.py
 Monitor a git repository, execute a command when it changes.
 
 Usage:
-    reposmon.py [options] [--] <giturl> <command>
+    reposmon.py [options] [--] [<giturl> <command>]
     reposmon.py -h | --help
 
 Options:
   -h --help                   Show this screen.
   -o --once                   Run only once
   -v --verbose                Verbose mode
+  -w --write=<writeymlpath>   Write arguments yaml file
+  -l --load=<loadymlpath>     Load arguments yaml file
   -i --interval=<interval>    Seconds between checks [default: 60].
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
+# Erik de Jonge
+# erik@a8.nl
+# license: gpl2
 
 import os
 import time
@@ -27,130 +32,6 @@ from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
 from os.path import join, exists, basename, expanduser
-
-
-def colorize_for_print(v):
-    """
-    @type v: str, unicode
-    @return: None
-    """
-    s = ""
-    v = v.strip()
-
-    if v == "false":
-        v = "False"
-    elif v == "true":
-        v = "True"
-
-    num = v.isdigit()
-
-    if not num:
-        try:
-            v2 = v.replace("'", "").replace('"', "")
-            num = float(v2)
-            num = True
-            v = v2
-        except ValueError:
-            pass
-
-    ispath = exists(v)
-
-    if num is True:
-        s += "\033[93m" + v + "\033[0m"
-    elif ispath is True:
-        s += "\033[35m" + v + "\033[0m"
-    elif v == "False":
-        s += "\033[31m" + v + "\033[0m"
-    elif v == "True":
-        s += "\033[32m" + v + "\033[0m"
-    else:
-        s += "\033[33m" + v + "\033[0m"
-
-    return s
-
-
-def dictionary_for_console(argdict, indent=""):
-    """
-    @type argdict: dict
-    @type indent: str
-    @return: sp
-    """
-    keys = argdict.keys()
-    keys.sort(key=lambda x: len(x))
-    sp = ""
-    lk = 0
-    ls = []
-
-    for k in keys:
-        s = indent + "\033[36m" + k + "`: " + "\033[0m"
-        v = str(argdict[k]).strip()
-        s += colorize_for_print(v)
-        ls.append((len(k), s))
-
-        if len(k) > lk:
-            lk = len(k)
-
-    for lns, s in ls:
-        s = s.replace("`", " " * (1 + (lk - lns)))
-        sp += s
-
-    return sp
-
-
-def sort_arguments(arguments):
-    """
-    @type arguments: dict
-    @return: tuple
-    """
-    opts = {}
-    posarg = {}
-
-    for k in arguments:
-        key = k.replace("pa_", "").replace("op_", "").strip()
-
-        if len(key) > 0:
-            if k.startswith("pa_"):
-                posarg[k.replace("pa_", "")] = arguments[k]
-
-            if k.startswith("op_"):
-                opts[k.replace("op_", "")] = arguments[k]
-        try:
-            possnum = arguments[k]
-
-            if isinstance(possnum, str):
-                if "." in possnum:
-                    arguments[k] = float(possnum)
-                else:
-                    arguments[k] = int(possnum)
-
-        except ValueError:
-            pass
-
-    return opts, posarg
-
-
-def arguments_for_console(arguments):
-    """
-    @type arguments: dict
-    @return: None
-    """
-    s = ""
-    opts, posarg = sort_arguments(arguments)
-    newline = False
-
-    if posarg:
-        s += "\033[91mPositional arguments:\033[0m"
-        s += dictionary_for_console(posarg, "\n  ")
-        newline = True
-
-    if opts:
-        if newline:
-            s += "\n\n"
-
-        s += "\033[91mOptions:\033[0m"
-        s += dictionary_for_console(opts, "\n  ")
-
-    return s + "\n"
 
 
 def raise_or_exit(e, debug=False):
@@ -166,57 +47,160 @@ def raise_or_exit(e, debug=False):
         exit(1)
 
 
-def get_print_yaml(yamlstring):
-    """
-    @type yamlstring: str, unicode
-    @return: None
-    """
-    s = ""
-
-    for i in yamlstring.split("\n"):
-        ls = [x for x in i.split(":") if x]
-        cnt = 0
-
-        if len(ls) > 1:
-            for ii in ls:
-                if cnt == 0:
-                    s += "\033[36m" + ii + ": " + "\033[0m"
-                else:
-                    s += colorize_for_print(ii)
-
-                cnt += 1
-        else:
-            if i.strip().startswith("---"):
-                s += "\033[95m" + i + "\033[0m"
-            else:
-                s += "\033[91m" + i + "\033[0m"
-
-        s += "\n"
-
-    return s.strip()
-
-
 class Arguments(object):
-
     """
     Argument dict to boject
     """
-
-    def __init__(self, positional=None, options=None, yamlfile=None):
+    def __init__(self, validate_schema=True, yamlfile=None, parse_arg=True, verbose=None):
         """
-        @type positional: dict
-        @type options: dict
+        @type yamlfile: str, unicode, None
+        @type verbose: bool, None
         @return: None
         """
         self.once = None
         self.command = None
         self.giturl = None
         self.cmdfolder = None
-        self.verbose = None
+        self.verbose = verbose
         self.giturl = None
         self.gitfolder = None
         self.interval = None
-        self.verbose = None
+        self.write = None
+        self.load = None
+        self.validate_schema = validate_schema
+        self.reprdict = {}
+
+        if yamlfile:
+            self.from_yaml_file(yamlfile)
+        elif parse_arg is True:
+            self.parse_args(validate_schema)
+
+            if self.write is not None:
+                fp = open(self.write, "w")
+                self.write = ""
+                fp.write(self.as_yaml())
+                self.write = fp.name
+                fp.close()
+            elif self.load is not None:
+                self.from_yaml_file(self.load)
+
+        if yamlfile:
+            raise AssertionError("not implemented")
+
+    @staticmethod
+    def colorize_for_print(v):
+        """
+        @type v: str, unicode
+        @return: None
+        """
+        s = ""
+        v = v.strip()
+
+        if v == "false":
+            v = "False"
+        elif v == "true":
+            v = "True"
+
+        num = v.isdigit()
+
+        if not num:
+            try:
+                v2 = v.replace("'", "").replace('"', "")
+                num = float(v2)
+                num = True
+                v = v2
+            except ValueError:
+                pass
+
+        ispath = exists(v)
+
+        if num is True:
+            s += "\033[93m" + v + "\033[0m"
+        elif ispath is True:
+            s += "\033[35m" + v + "\033[0m"
+        elif v == "False":
+            s += "\033[31m" + v + "\033[0m"
+        elif v == "True":
+            s += "\033[32m" + v + "\033[0m"
+        else:
+            s += "\033[33m" + v + "\033[0m"
+
+        return s
+
+    def dictionary_for_console(self, argdict, indent=""):
+        """
+        @type argdict: dict
+        @type indent: str
+        @return: sp
+        """
+        keys = argdict.keys()
+        keys.sort(key=lambda x: len(x))
+        sp = ""
+        lk = 0
+        ls = []
+
+        for k in keys:
+            s = indent + "\033[36m" + k + "`: " + "\033[0m"
+            v = str(argdict[k]).strip()
+            s += self.colorize_for_print(v)
+            ls.append((len(k), s))
+
+            if len(k) > lk:
+                lk = len(k)
+
+        for lns, s in ls:
+            s = s.replace("`", " " * (1 + (lk - lns)))
+            sp += s
+
+        return sp
+
+    def get_print_yaml(self, yamlstring):
+        """
+        @type yamlstring: str, unicode
+        @return: None
+        """
+        s = ""
+
+        for i in yamlstring.split("\n"):
+            ls = [x for x in i.split(":") if x]
+            cnt = 0
+
+            if len(ls) > 1:
+                for ii in ls:
+                    if cnt == 0:
+                        s += "\033[36m" + ii + ": " + "\033[0m"
+                    else:
+                        s += self.colorize_for_print(ii)
+
+                    cnt += 1
+            else:
+                if i.strip().startswith("---"):
+                    s += "\033[95m" + i + "\033[0m"
+                else:
+                    s += "\033[91m" + i + "\033[0m"
+
+            s += "\n"
+
+        return s.strip()
+
+    @staticmethod
+    def not_exists(path):
+        """
+        @type path: str, unicode
+        @return: None
+        """
+        return not exists(path)
+
+    def __str__(self):
+        """
+        __str__
+        """
+        return self.get_print_yaml(self.as_yaml())
+
+    def _set_fields(self, positional, options):
+        """
+        _parse_args
+        """
         dictionary = {}
 
         if positional and options:
@@ -227,9 +211,6 @@ class Arguments(object):
             self.reprdict = {"positional": positional.copy(),
                              "options": options.copy()}
 
-        elif yamlfile:
-            raise AssertionError("not implemented")
-
         def _traverse(key, element):
             """
             @type key: str, unicode
@@ -237,154 +218,326 @@ class Arguments(object):
             @return: None
             """
             if isinstance(element, dict):
-                return key, Arguments(element)
+                return key, "dicts not allowed"
             else:
                 return key, element
 
         object_dict = dict(_traverse(k, v) for k, v in dictionary.iteritems())
         self.__dict__.update(object_dict)
 
-    def __str__(self):
+    @staticmethod
+    def sort_arguments(arguments):
         """
-        __str__
+        @type arguments: dict
+        @return: tuple
         """
-        y = yaml.dump(self.reprdict, default_flow_style=False)
-        return get_print_yaml("---\n" + y)
-
-
-def get_arguments(verbose, validate_schema=True):
-    """
-    @type verbose: bool
-    @type validate_schema: bool
-    @return: None
-    """
-    arguments = dict(docopt(__doc__, version='0.1'))
-    k = ""
-    try:
-        for k in arguments:
-            if "folder" in k or "path" in k:
-                if hasattr(arguments[k], "replace"):
-                    arguments[k] = arguments[k].replace("~", expanduser("~"))
-
-                    if arguments[k].strip() == ".":
-                        arguments[k] = os.getcwd()
-
-                    arguments[k] = arguments[k].rstrip("/").strip()
-
-    except AttributeError as e:
-        print "\033[31mAttribute error:" + k.strip(), "->", str(e), "\033[0m"
-        print "\033[30m", "attrs: " + "\033[0m",
+        opts = {}
+        posarg = {}
 
         for k in arguments:
-            print "\033[30m", k.strip() + "\033[0m",
+            key = k.replace("pa_", "").replace("op_", "").strip()
 
-        print
-        raise_or_exit(e, verbose)
+            if len(key) > 0:
+                if k.startswith("pa_"):
+                    posarg[k.replace("pa_", "")] = arguments[k]
 
-    try:
-        schema = Schema({"<command>": str,
-                         "<giturl>": lambda x: ".git" in x,
-                         Optional("-i"): int,
-                         Optional("--help"): Or(Use(bool), error="[-h|--help] must be a bool"),
-                         Optional("--verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
-                         Optional("--once"): Or(Use(bool), error="[-o|--once] must be a bool"),
-                         Optional("--interval"): Or(Use(int), error="[-i|--interval] must be an int"),
-                         Optional("--gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
-                         Optional("--cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
-
-        del arguments["--"]
-        if validate_schema is True:
-            arguments = schema.validate(arguments)
-
-        arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
-    except SchemaError as e:
-        if "lambda" in str(e):
-            err = "Error: giturl should end with .git"
-        else:
-            err = str(e)
-
-        print "\033[31m" + err.strip() + "\033[0m"
-        print __doc__
-        raise_or_exit(e, verbose)
-
-    if verbose:
-        print arguments_for_console(arguments)
-
-    opts, posarg = sort_arguments(arguments)
-    return Arguments(posarg, opts)
-
-
-def clone_or_pull_from(gp, remote, name, verbose=False):
-    """
-    @type gp: str, unicode
-    @type remote: str, unicode
-    @type name: str, unicode
-    @type verbose: bool
-    @return: None
-    """
-    try:
-        if exists(gp):
+                if k.startswith("op_"):
+                    opts[k.replace("op_", "")] = arguments[k]
             try:
-                if verbose:
-                    print "\033[32mPulling:", name, "\033[0m"
+                possnum = arguments[k]
 
-                r = Repo(gp)
-                origin = r.remote()
-                if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
-                    raise SystemExit("Different remote url: " + str(remote) + "\n                       " + origin.config_reader.config.get_value('remote "origin"', "url"))
+                if isinstance(possnum, str):
+                    if "." in possnum:
+                        arguments[k] = float(possnum)
+                    else:
+                        arguments[k] = int(possnum)
 
-                hcommit_pre = r.head.commit
-                origin.fetch()
-                origin.pull()
-                hcommit_post = r.head.commit
-                if hcommit_post != hcommit_pre:
-                    index = r.index
-                    changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
+            except ValueError:
+                pass
+
+        return opts, posarg
+
+    def parse_args(self, validate_schema=True):
+        """
+        @type validate_schema: bool
+        @return: None
+        """
+        if validate_schema is not None:
+            self.validate_schema = validate_schema
+
+        if self.load is None:
+            arguments = dict(docopt(__doc__, version='0.1'))
+            k = ""
+            try:
+                for k in arguments:
+                    if "folder" in k or "path" in k:
+                        if hasattr(arguments[k], "replace"):
+                            arguments[k] = arguments[k].replace("~", expanduser("~"))
+
+                            if arguments[k].strip() == ".":
+                                arguments[k] = os.getcwd()
+
+                            arguments[k] = arguments[k].rstrip("/").strip()
+
+            except AttributeError as e:
+                print "\033[31mAttribute error:" + k.strip(), "->", str(e), "\033[0m"
+                print "\033[30m", "attrs: " + "\033[0m",
+
+                for k in arguments:
+                    print "\033[30m", k.strip() + "\033[0m",
+
+                print
+                raise_or_exit(e, self.verbose)
+        else:
+            loaded_arguments = yaml.load(open(self.load))
+            arguments = {}
+            for k in loaded_arguments["options"]:
+                arguments["op_" + k] = loaded_arguments["options"][k]
+            for k in loaded_arguments["positional"]:
+                arguments["pa_" + k] = loaded_arguments["positional"][k]
+        try:
+            schema = Schema({"pa_command": str,
+                             "pa_giturl": lambda x: ".git" in x,
+                             Optional("-i"): int,
+                             Optional("op_help"): Or(Use(bool), error="[-h|--help] must be a bool"),
+                             Optional("op_verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
+                             Optional("op_once"): Or(Use(bool), error="[-o|--once] must be a bool"),
+                             Optional("op_interval"): Or(Use(int), error="[-i|--interval] must be an int"),
+                             Optional("op_load"): Or(None, exists, error='[-l|--load] path should not exist'),
+                             Optional("op_write"): Or(None, self.not_exists, exists, error='[-w|--write] path exists'),
+                             Optional("op_gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
+                             Optional("op_cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
+
+            if "--" in arguments:
+                del arguments["--"]
+
+            arguments = dict((x.replace("<", "pa_").replace(">", "").replace("--", "op_").replace("-", "_"), y) for x, y in arguments.viewitems())
+
+            if self.validate_schema is True:
+                arguments = schema.validate(arguments)
+        except SchemaError as e:
+            if "lambda" in str(e):
+                err = "Error: giturl should end with .git"
+            else:
+                err = str(e)
+
+            print "\033[31m" + err.strip() + "\033[0m"
+            print __doc__
+            raise_or_exit(e, self.verbose)
+
+        if self.verbose:
+            print self.arguments_for_console(arguments)
+
+        options, positional_arguments = self.sort_arguments(arguments)
+        self._set_fields(positional_arguments, options)
+
+    def arguments_for_console(self, arguments):
+        """
+        @type arguments: dict
+        @return: None
+        """
+        s = ""
+        opts, posarg = self.sort_arguments(arguments)
+        newline = False
+
+        if posarg:
+            s += "\033[91mPositional arguments:\033[0m"
+            s += self.dictionary_for_console(posarg, "\n  ")
+            newline = True
+
+        if opts:
+            if newline:
+                s += "\n\n"
+
+            s += "\033[91mOptions:\033[0m"
+            s += self.dictionary_for_console(opts, "\n  ")
+
+        return s + "\n"
+
+    def as_yaml(self):
+        """
+        as_yaml
+        """
+        return "---\n" + yaml.dump(self.reprdict, default_flow_style=False)
+
+    def from_yaml_file(self, file_path):
+        """
+        @type file_path: str, unicode
+        @return: None
+        """
+        if exists(file_path):
+            self.from_yaml(open(file_path).read())
+        else:
+            raise AssertionError("File not found: " + file_path)
+
+    def from_yaml(self, yamldata):
+        """
+        @type yamldata: str, unicode
+        @return: None
+        """
+        self.reprdict = yaml.load(yamldata)
+
+
+class AppInstanceRunning(AssertionError):
+    """
+    @type AssertionError: str, unicode
+    @return: None
+    """
+    pass
+
+
+class AppInstance(object):
+    """
+    Lockfile
+    """
+    def __init__(self, arguments=None, verbose=False):
+        """
+        @type arguments: str, unicode
+        @type verbose: bool
+        @return: None
+        """
+        self.verbose = verbose
+        self.arguments = arguments
+        name = basename(__file__).split(".")[0]
+
+        if arguments is None:
+            self.lockfile = join(expanduser("~"), "." + name + ".pid")
+        else:
+            lfname = hashlib.md5(basename(__file__) + arguments).hexdigest()
+            self.lockfile = join(expanduser("~"), "." + name + "_" + lfname + ".pid")
+
+    def __exit__(self, t, value, traceback):
+        """
+        @type t: str, unicode
+        @type value: str, unicode
+        @type traceback: str, unicode
+        @return: None
+        """
+        print "\033[92m", t, "\033[0m"
+        print "\033[93m", value, "\033[0m"
+        print "\033[94m", traceback, "\033[0m"
+        if os.path.exists(self.lockfile):
+            if int(open(self.lockfile).read()) == os.getpid():
+                os.remove(self.lockfile)
+
+    def __enter__(self):
+        """
+        __enter__
+        """
+        running = False
+
+        if exists(self.lockfile):
+            pid = int(open(self.lockfile).read().strip())
+            cmdline = None
+
+            for p in psutil.process_iter():
+                if p.pid == pid:
+                    cmdline = " ".join(p.as_dict()["cmdline"])
+
+                    if __file__ in str(cmdline):
+                        running = True
+
+            if running is False:
+                os.remove(self.lockfile)
+
+            if self.verbose is True and cmdline is not None and running is False:
+                print "\033[91mAnother type proc found:", pid, "\033[0m"
+
+            if self.verbose is True:
+                if running is True:
+                    print "\033[91mAnother instance found:", pid, "\033[0m"
+
+        if not running:
+            fh = open(self.lockfile, "w")
+            fh.write(str(os.getpid()))
+            fh.close()
+
+            if self.verbose is True:
+                print "\033[32m" + self.lockfile, str(os.getpid()) + "\033[0m"
+        else:
+            raise AppInstanceRunning(self.lockfile)
+
+        return running
+
+
+class GitRepos(object):
+    """
+    Repo
+    """
+    @staticmethod
+    def clone_or_pull_from(gp, remote, name, verbose=False):
+        """
+        @type gp: str, unicode
+        @type remote: str, unicode
+        @type name: str, unicode
+        @type verbose: bool
+        @return: None
+        """
+        try:
+            if exists(gp):
+                try:
+                    if verbose:
+                        print "\033[32mPulling:", name, "\033[0m"
+
+                    r = Repo(gp)
+                    origin = r.remote()
+                    if remote != origin.config_reader.config.get_value('remote "origin"', "url"):
+                        raise SystemExit("Different remote url: " + str(remote) + "\n                       " + origin.config_reader.config.get_value('remote "origin"', "url"))
+
+                    hcommit_pre = r.head.commit
+                    origin.fetch()
+                    origin.pull()
+                    hcommit_post = r.head.commit
+                    if hcommit_post != hcommit_pre:
+                        index = r.index
+                        changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
+
+                        if verbose:
+                            print "\033[34m", changed, "\033[0m"
+
+                        return True
+                    else:
+                        return False
+                except GitCommandError as e:
+                    print
+                    print "\033[91m" + str(e), "\033[0m"
+                    raise SystemExit(e)
+            else:
+                try:
+                    if verbose:
+                        print "\033[32mCloning:", name, "\033[0m"
+
+                    ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
 
                     if verbose:
-                        print "\033[34m", changed, "\033[0m"
+                        print "\033[37m", ret, "\033[0m"
+                except GitCommandError as e:
+                    print "\033[91m" + str(e), "\033[0m"
+                    raise SystemExit(e)
 
-                    return True
-                else:
-                    return False
-            except GitCommandError as e:
-                print
-                print "\033[91m" + str(e), "\033[0m"
-                raise SystemExit(e)
-        else:
-            try:
-                if verbose:
-                    print "\033[32mCloning:", name, "\033[0m"
+                return True
+        except AssertionError as e:
+            print "\033[31m", e, "\033[0m"
+            return False
+        except BaseException as e:
+            print "\033[31m", e, "\033[0m"
+            return False
 
-                ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
+    def check_repos(self, folder, url, verbose=False):
+        """
+        @type folder: str, unicode
+        @type url: str, unicode
+        @type verbose: bool
+        @return: None
+        """
+        name = basename(url).split(".")[0]
+        gp = join(folder, name)
 
-                if verbose:
-                    print "\033[37m", ret, "\033[0m"
-            except GitCommandError as e:
-                print "\033[91m" + str(e), "\033[0m"
-                raise SystemExit(e)
+        if verbose:
+            print "\033[30musing github folder:", gp, "\033[0m"
 
-            return True
-    except AssertionError as e:
-        print "\033[31m", e, "\033[0m"
-        return False
-
-
-def check_repos(folder, url, verbose=False):
-    """
-    @type folder: str, unicode
-    @type url: str, unicode
-    @type verbose: bool
-    @return: None
-    """
-    name = basename(url).split(".")[0]
-    gp = join(folder, name)
-
-    if verbose:
-        print "\033[30musing github folder:", gp, "\033[0m"
-
-    # if exists(gp):
-    return clone_or_pull_from(gp, url, name, verbose)
+        # if exists(gp):
+        return self.clone_or_pull_from(gp, url, name, verbose)
 
 
 def call_command(command, cmdfolder, verbose=False):
@@ -418,138 +571,22 @@ def call_command(command, cmdfolder, verbose=False):
         print e
 
 
-def running_write_lockfile(lockfile, verbose=False):
-    """
-    @type lockfile: str, unicode
-    @type verbose: bool
-    @return: None
-    """
-    fh = open(lockfile, "w")
-    fh.write(str(os.getpid()))
-    fh.close()
-
-    if verbose is True:
-        print "\033[32m" + lockfile, str(os.getpid()) + "\033[0m"
-
-
-def running_lockfile_name(arguments):
-    """
-    @type arguments: str, unicode
-    @return: None
-    """
-    name = basename(__file__).split(".")[0]
-    lfname = hashlib.md5(basename(__file__) + arguments.command + arguments.giturl).hexdigest()
-    lockfile = join(expanduser("~"), "."+name+"_" + lfname + ".pid")
-    print
-    print lockfile
-    
-    return lockfile
-
-
-def start_profile():
-    """
-    start_profile
-    @rtype: Profile
-    """
-    from cProfile import Profile
-    pr = Profile()
-    pr.enable()
-    return pr
-
-
-def end_profile(pr, items=20, printstats=False):
-    """
-    @type pr: Profile
-    @type items: int
-    @type printstats: bool
-    """
-    if not "console" in globals():
-        def console(x):
-            print "\033[93m$", x, "\033[0m"
-    from pstats import Stats
-    p = Stats(pr)
-    p.strip_dirs()
-    console("total time")
-    p.sort_stats('time')
-
-    if items is None:
-        p.print_stats()
-    else:
-        p.print_stats(items)
-
-    if printstats:
-        console("cumulative time")
-        p.sort_stats('cumtime')
-
-        if items is None:
-            p.print_stats()
-        else:
-            p.print_stats(items)
-
-        p.sort_stats('calls')
-
-        if items is None:
-            p.print_stats()
-        else:
-            p.print_stats(items)
-
-def running_remove_lockfile(name):
-    """
-    @type name: str, unicode
-    @return: None
-    """
-    if exists(name):
-        if int(open(name).read()) == os.getpid():
-            os.remove(name)
-
-
-def running_check_lockfile(name, verbose=False):
-    """
-    @type name: str, unicode
-    @type verbose: bool
-    @return: None
-    """
-    running = False
-
-    if exists(name):
-        pid = int(open(name).read().strip())
-        cmdline = None
-
-        for p in psutil.process_iter():
-            if p.pid == pid:
-                cmdline = " ".join(p.as_dict()["cmdline"])
-
-                if __file__ in str(cmdline):
-                    running = True
-
-        if running is False:
-            os.remove(name)
-
-        if verbose is True and cmdline is not None and running is False:
-            print "\033[91mAnother type proc found:", pid, "\033[0m"
-
-        if verbose is True:
-            if running is True:
-                print "\033[91mAnother instance found:", pid, "\033[0m"
-
-    return running
-
-
 def main_loop(arguments):
     """
     @type arguments: Arguments
     @return: None
     """
-    while True:
-        if False:
-            if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
-                if arguments.verbose:
-                    print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
+    r = GitRepos()
 
-                call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
-            else:
-                if arguments.verbose:
-                    print "\033[30m" + arguments.giturl, "not changed\033[0m"
+    while True:
+        if r.check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
+            if arguments.verbose:
+                print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
+
+            call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
+        else:
+            if arguments.verbose:
+                print "\033[30m" + arguments.giturl, "not changed\033[0m"
 
         time.sleep(arguments.interval)
 
@@ -561,14 +598,11 @@ def main():
     """
     git@github.com:erikdejonge/schema.git
     """
-    schemaless_arguments = get_arguments(False, validate_schema=False)
-    lockfile = running_lockfile_name(schemaless_arguments)
+    arguments = Arguments(verbose=False, validate_schema=False)
     try:
-        if running_check_lockfile(lockfile, schemaless_arguments.verbose) is False:
+        with AppInstance(arguments=arguments.command + arguments.giturl):
             print "running"
-            
-            arguments = get_arguments(schemaless_arguments.verbose)
-            running_write_lockfile(lockfile, arguments.verbose)
+            arguments.parse_args()
             main_loop(arguments)
     except SystemExit as e:
         e = str(e).strip()
@@ -579,10 +613,10 @@ def main():
             print "\033[91m", e, "\033[0m"
     except KeyboardInterrupt:
         print "\n\033[33mbye\033[0m"
-    finally:
-        running_remove_lockfile(lockfile)
+    except AppInstanceRunning:
+        if arguments.verbose:
+            print "\033[31minstance runs already\033[0m"
 
 
 if __name__ == "__main__":
-
     main()
