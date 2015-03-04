@@ -48,12 +48,12 @@ python reposmon.py git@github.com:erikdejonge/reposmon.git "docker build ."
 
 ###optional
 #####bash alias
-alias reposmon="#/usr/bin/env python ~/[...]/reposmon/reposmon.py
+alias reposmon="~/[...]/reposmon/reposmon.py
 
 install alias with a workspace checkout of reposmon:
 
 ```bash
-alias reposmon="#/usr/bin/env python /Users/rabshakeh/workspace/reposmon/reposmon.py"
+alias reposmon="/Users/rabshakeh/workspace/reposmon/reposmon.py"
 ```
 
 #####commit and sort aliases on osx

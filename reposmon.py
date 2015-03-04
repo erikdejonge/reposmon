@@ -2,7 +2,6 @@
 # coding=utf-8
 """
 reposmon.py
-
 Monitor a git repository, execute a command when it changes.
 
 Usage:
@@ -19,10 +18,10 @@ Options:
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
-#
+
 # erik@a8.nl (04-03-15)
 # license: GNU-GPL2
-#
+
 import os
 import time
 import subprocess
@@ -179,11 +178,17 @@ class Arguments(object):
         """
         return not exists(path)
 
-    def __str__(self):
+    def for_print(self):
         """
-        __str__
+        for_print
         """
         return self.get_print_yaml(self.as_yaml())
+
+    def __str__(self):
+        """
+        """
+
+        return str(self)
 
     def _set_fields(self, positional, options):
         """
@@ -264,6 +269,8 @@ class Arguments(object):
 
                             if arguments[k].strip() == ".":
                                 arguments[k] = os.getcwd()
+                            if "./" in arguments[k].strip():
+                                arguments[k] = arguments[k].replace("./", os.getcwd()+"/")
 
                             arguments[k] = arguments[k].rstrip("/").strip()
 
@@ -516,6 +523,8 @@ def main():
 
             if arguments.giturl and arguments.command:
                 main_loop(arguments)
+            else:
+                print __doc__
 
     except SystemExit as e:
         e = str(e).strip()
