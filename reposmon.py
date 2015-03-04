@@ -22,6 +22,7 @@ import time
 import subprocess
 import yaml
 import psutil
+import hashlib
 from git import Repo, GitCommandError
 from docopt import docopt
 from schema import Schema, SchemaError, Or, Optional, Use
@@ -428,16 +429,69 @@ def running_write_lockfile(lockfile, verbose=False):
     fh.close()
 
     if verbose is True:
-        print "\033[32m" + str(os.getpid()) + "\033[0m"
+        print "\033[32m" + lockfile, str(os.getpid()) + "\033[0m"
 
 
-def running_lockfile_name():
+def running_lockfile_name(arguments):
     """
-    running_lockfile_name
+    @type arguments: str, unicode
+    @return: None
     """
-    lockfile = join(expanduser("~"), __file__ + ".pid")
+    name = basename(__file__).split(".")[0]
+    lfname = hashlib.md5(basename(__file__) + arguments.command + arguments.giturl).hexdigest()
+    lockfile = join(expanduser("~"), "."+name+"_" + lfname + ".pid")
+    print
+    print lockfile
+    
     return lockfile
 
+
+def start_profile():
+    """
+    start_profile
+    @rtype: Profile
+    """
+    from cProfile import Profile
+    pr = Profile()
+    pr.enable()
+    return pr
+
+
+def end_profile(pr, items=20, printstats=False):
+    """
+    @type pr: Profile
+    @type items: int
+    @type printstats: bool
+    """
+    if not "console" in globals():
+        def console(x):
+            print "\033[93m$", x, "\033[0m"
+    from pstats import Stats
+    p = Stats(pr)
+    p.strip_dirs()
+    console("total time")
+    p.sort_stats('time')
+
+    if items is None:
+        p.print_stats()
+    else:
+        p.print_stats(items)
+
+    if printstats:
+        console("cumulative time")
+        p.sort_stats('cumtime')
+
+        if items is None:
+            p.print_stats()
+        else:
+            p.print_stats(items)
+
+        p.sort_stats('calls')
+
+        if items is None:
+            p.print_stats()
+        else:
+            p.print_stats(items)
 
 def running_remove_lockfile(name):
     """
@@ -487,30 +541,32 @@ def main_loop(arguments):
     @return: None
     """
     while True:
-        if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
-            if arguments.verbose:
-                print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
+        if False:
+            if check_repos(arguments.gitfolder, arguments.giturl, verbose=arguments.verbose):
+                if arguments.verbose:
+                    print "\033[32mchanged, calling:", arguments.command, "in", arguments.cmdfolder, "\033[0m"
 
-            call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
-        else:
-            if arguments.verbose:
-                print "\033[30m" + arguments.giturl, "not changed\033[0m"
+                call_command(arguments.command, arguments.cmdfolder, arguments.verbose)
+            else:
+                if arguments.verbose:
+                    print "\033[30m" + arguments.giturl, "not changed\033[0m"
+
+        time.sleep(arguments.interval)
 
         if arguments.once:
             break
-
-        time.sleep(arguments.interval)
 
 
 def main():
     """
     git@github.com:erikdejonge/schema.git
     """
-    lockfile = running_lockfile_name()
+    schemaless_arguments = get_arguments(False, validate_schema=False)
+    lockfile = running_lockfile_name(schemaless_arguments)
     try:
-        schemaless_arguments = get_arguments(False, validate_schema=False)
-
         if running_check_lockfile(lockfile, schemaless_arguments.verbose) is False:
+            print "running"
+            
             arguments = get_arguments(schemaless_arguments.verbose)
             running_write_lockfile(lockfile, arguments.verbose)
             main_loop(arguments)
@@ -528,4 +584,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
