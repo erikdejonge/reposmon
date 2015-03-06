@@ -25,7 +25,7 @@ Options:
 
 import time
 import subprocess
-from os.path import join, exists, basename
+from os.path import join, basename
 from arguments import *
 from git import Repo, GitCommandError
 from appinstance import AppInstance, AppInstanceRunning
@@ -70,8 +70,7 @@ class GitRepos(object):
                     else:
                         return False
                 except GitCommandError as e:
-                    print
-                    print "\033[91m" + str(e), "")
+                    console(e, color="red")
                     raise SystemExit(e)
             else:
                 try:
@@ -81,19 +80,19 @@ class GitRepos(object):
                     ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
 
                     if verbose:
-                        print "\033[37m", ret, "")
+                        console(ret, color="yellow")
                 except GitCommandError as e:
-                    print "\033[91m" + str(e), "")
+                    console(e, color="red")
                     raise SystemExit(e)
 
                 return True
         except AssertionError as e:
-            console(color="red", msg="", e, "")
+            console(e, color="red")
             return False
         except KeyboardInterrupt:
             raise
         except BaseException as e:
-            console(color="red", msg="", e, "")
+            console(e, color="red")
             return False
 
     def check_repos(self, folder, url, verbose=False):
@@ -107,7 +106,7 @@ class GitRepos(object):
         gp = join(folder, name)
 
         if verbose:
-            print "\033[30musing github folder:", gp, "")
+            console(gp, color="yellow")
 
         # if exists(gp):
         return self.clone_or_pull_from(gp, url, name, verbose)
@@ -122,7 +121,7 @@ def call_command(command, cmdfolder, verbose=False):
     """
     try:
         if verbose:
-            print "\033[36m", cmdfolder, command, "")
+            console(cmdfolder, command, color="yellow")
 
         proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
 
@@ -131,7 +130,7 @@ def call_command(command, cmdfolder, verbose=False):
                 output = proc.stdout.readline()
 
                 if len(output.strip()) > 0:
-                    print "\033[30m", output, ""),
+                    console(output, color="yellow"),
         else:
             so, se = proc.communicate()
             if proc.returncode != 0 or verbose:
@@ -153,7 +152,7 @@ def call_command(command, cmdfolder, verbose=False):
 
 def main_loop(parsedargs):
     """
-    @type args: tuple
+    @type parsedargs: Arguments
     @return: None
     """
     r = GitRepos()
@@ -161,12 +160,12 @@ def main_loop(parsedargs):
     while True:
         if r.check_repos(parsedargs.gitfolder, parsedargs.giturl, verbose=parsedargs.verbose):
             if parsedargs.verbose:
-                console(color="green", msg="changed, calling:", parsedargs.command, "in", parsedargs.cmdfolder, "")
+                console("changed, calling:", parsedargs.command, "in", parsedargs.cmdfolder, color="yellow")
 
             call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose)
         else:
             if parsedargs.verbose:
-                print "\033[30m" + parsedargs.giturl, "not changed")
+                console(parsedargs.giturl, "not changed")
 
         time.sleep(parsedargs.interval)
 
@@ -178,6 +177,7 @@ def main():
     """
     git@github.com:erikdejonge/schema.git
     """
+    parsedargs = None
     try:
         parsedargs = Arguments()
         argstring = ""
@@ -185,35 +185,36 @@ def main():
         if parsedargs.command and parsedargs.giturl:
             argstring = str(parsedargs.command) + str(parsedargs.giturl)
         with AppInstance(arguments=argstring):
-            schema = Schema({"pa_command": Or(None, str),
-                             "pa_giturl": Or(None, lambda x: ".git" in x),
+            schema = Schema({"command": Or(None, str),
+                             "giturl": Or(None, lambda x: ".git" in x),
                              Optional("-i"): int,
-                             Optional("op_help"): Or(Use(bool), error="[-h|--help] must be a bool"),
-                             Optional("op_verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
-                             Optional("op_once"): Or(Use(bool), error="[-o|--once] must be a bool"),
-                             Optional("op_interval"): Or(Use(int), error="[-i|--interval] must be an int"),
-                             Optional("op_load"): Or(None, exists, error='[-l|--load] path should not exist'),
-                             Optional("op_write"): Or(None, not_exists, exists, error='[-w|--write] path exists'),
-                             Optional("op_gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
-                             Optional("op_cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
+                             Optional("help"): Or(Use(bool), error="[-h|--help] must be a bool"),
+                             Optional("verbose"): Or(Use(bool), error="[-v|--verbose] must be a bool"),
+                             Optional("once"): Or(Use(bool), error="[-o|--once] must be a bool"),
+                             Optional("interval"): Or(Use(int), error="[-i|--interval] must be an int"),
+                             Optional("load"): Or(None, exists, error='[-l|--load] path should not exist'),
+                             Optional("write"): Or(None, not_exists, exists, error='[-w|--write] path exists'),
+                             Optional("gitfolder"): Or(str, exists, error='[-g|--gitfolder] path should exist'),
+                             Optional("cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
-            parsedargs.parse_args()
+            parsedargs.parse_arguments(schema)
+            print type(parsedargs.interval)
+            return
 
             if parsedargs.giturl and parsedargs.command:
                 main_loop(parsedargs)
             else:
                 print __doc__
 
-    except SystemExit as e:
+    except DocoptExit as e:
         if hasattr(e, "usage"):
-            console(e.usage)
+            console(e.usage, plainprint=True)
         else:
             e = str(e).strip()
 
             if "Options:" in e:
-                console(e)
-            else:
-                console(e)
+                console(e, plainprint=True)
+
 
     except KeyboardInterrupt:
         console(color="yellow", msg="bye")
@@ -223,6 +224,7 @@ def main():
                 console(color="red", msg="instance runs already")
         else:
             console('parsedargs is None')
+
 
 if __name__ == "__main__":
     main()
