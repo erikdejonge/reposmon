@@ -23,4 +23,14 @@ setup(name='reposmon',
       scripts=['reposmon/reposmon'],
       packages=['reposmon'],
       zip_safe=True,
-      install_requires=['consoleprinter', 'arguments', 'appinstance', 'schema', 'GitPython', 'pyyaml', 'docopt', 'psutil'])
+      install_requires=['consoleprinter', 'arguments', 'appinstance', 'schema', 'GitPython', 'pyyaml', 'docopt', 'psutil'],
+      classifiers=[
+          "Programming Language :: Python",
+          "Programming Language :: Python :: 3",
+          "Development Status :: Beta",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
+          "Operating System :: POSIX",
+          "Topic :: Software Development :: Quality Assurance",
+          "Topic :: System",
+      ])
