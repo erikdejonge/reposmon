@@ -1,7 +1,9 @@
 # coding=utf-8
 """
 unittester
-erik@a8.nl (05-03-15)
+-
+Active8 (05-03-15)
+author: erik@a8.nl
 license: GNU-GPL2
 """
 from unittester import *
