@@ -198,8 +198,6 @@ def main():
                              Optional("cmdfolder"): Or(str, exists, error='[-c|--cmdfolder] path should exist')})
 
             parsedargs.parse_arguments(schema)
-            print type(parsedargs.interval)
-            return
 
             if parsedargs.giturl and parsedargs.command:
                 main_loop(parsedargs)
