@@ -1,6 +1,0 @@
-appinstance
-schema
-GitPython
-pyyaml
-docopt
-psutil
