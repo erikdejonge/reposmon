@@ -48,7 +48,7 @@ class GitRepos(object):
             if exists(gp):
                 try:
                     if verbose:
-                        print "\033[32mPulling:", name, "\033[0m"
+                        console("Pulling:", name, color="green")
 
                     r = Repo(gp)
                     origin = r.remote()
@@ -64,36 +64,36 @@ class GitRepos(object):
                         changed = "\n  -" + "\n  -".join([str(x).split("\n")[0] for x in index.diff(hcommit_pre)])
 
                         if verbose:
-                            print "\033[34m", changed, "\033[0m"
+                            console(changed, color="blue")
 
                         return True
                     else:
                         return False
                 except GitCommandError as e:
                     print
-                    print "\033[91m" + str(e), "\033[0m"
+                    print "\033[91m" + str(e), "")
                     raise SystemExit(e)
             else:
                 try:
                     if verbose:
-                        print "\033[32mCloning:", name, "\033[0m"
+                        console("Cloning:", name, color="green")
 
                     ret = name + " " + str(Repo.clone_from(remote, gp).active_branch) + " cloned"
 
                     if verbose:
-                        print "\033[37m", ret, "\033[0m"
+                        print "\033[37m", ret, "")
                 except GitCommandError as e:
-                    print "\033[91m" + str(e), "\033[0m"
+                    print "\033[91m" + str(e), "")
                     raise SystemExit(e)
 
                 return True
         except AssertionError as e:
-            print "\033[31m", e, "\033[0m"
+            console(color="red", msg="", e, "")
             return False
         except KeyboardInterrupt:
             raise
         except BaseException as e:
-            print "\033[31m", e, "\033[0m"
+            console(color="red", msg="", e, "")
             return False
 
     def check_repos(self, folder, url, verbose=False):
@@ -107,7 +107,7 @@ class GitRepos(object):
         gp = join(folder, name)
 
         if verbose:
-            print "\033[30musing github folder:", gp, "\033[0m"
+            print "\033[30musing github folder:", gp, "")
 
         # if exists(gp):
         return self.clone_or_pull_from(gp, url, name, verbose)
@@ -122,7 +122,7 @@ def call_command(command, cmdfolder, verbose=False):
     """
     try:
         if verbose:
-            print "\033[36m", cmdfolder, command, "\033[0m"
+            print "\033[36m", cmdfolder, command, "")
 
         proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
 
@@ -131,7 +131,7 @@ def call_command(command, cmdfolder, verbose=False):
                 output = proc.stdout.readline()
 
                 if len(output.strip()) > 0:
-                    print "\033[30m", output, "\033[0m",
+                    print "\033[30m", output, ""),
         else:
             so, se = proc.communicate()
             if proc.returncode != 0 or verbose:
@@ -161,12 +161,12 @@ def main_loop(parsedargs):
     while True:
         if r.check_repos(parsedargs.gitfolder, parsedargs.giturl, verbose=parsedargs.verbose):
             if parsedargs.verbose:
-                print "\033[32mchanged, calling:", parsedargs.command, "in", parsedargs.cmdfolder, "\033[0m"
+                console(color="green", msg="changed, calling:", parsedargs.command, "in", parsedargs.cmdfolder, "")
 
             call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose)
         else:
             if parsedargs.verbose:
-                print "\033[30m" + parsedargs.giturl, "not changed\033[0m"
+                print "\033[30m" + parsedargs.giturl, "not changed")
 
         time.sleep(parsedargs.interval)
 
@@ -216,11 +216,11 @@ def main():
                 console(e)
 
     except KeyboardInterrupt:
-        print "\n\033[33mbye\033[0m"
+        console(color="yellow", msg="bye")
     except AppInstanceRunning:
         if parsedargs is not None:
             if parsedargs.verbose:
-                print "\033[31minstance runs already\033[0m"
+                console(color="red", msg="instance runs already")
         else:
             console('parsedargs is None')
 
