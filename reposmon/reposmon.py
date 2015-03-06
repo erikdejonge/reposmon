@@ -24,11 +24,14 @@ Options:
 # license: GNU-GPL2
 
 import time
+import hashlib
 import subprocess
+import stat
 from os.path import join, basename
 from arguments import *
 from git import Repo, GitCommandError
 from appinstance import AppInstance, AppInstanceRunning
+from consoleprinter import console_exception
 
 
 class GitRepos(object):
@@ -123,7 +126,15 @@ def call_command(command, cmdfolder, verbose=False):
         if verbose:
             console(cmdfolder, command, color="yellow")
 
-        proc = subprocess.Popen(command.split(" "), stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder)
+        commandfile = hashlib.md5(command).hexdigest() + ".sh"
+        commandfilepath = join(cmdfolder, commandfile)
+        open(commandfilepath, "w").write(command)
+
+        if not os.path.exists(commandfilepath):
+            raise ValueError("commandfile could not be made")
+
+        os.chmod(commandfilepath, stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+        proc = subprocess.Popen(commandfilepath, stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder, shell=True)
 
         if verbose:
             while proc.poll() is None:
@@ -142,12 +153,15 @@ def call_command(command, cmdfolder, verbose=False):
             fout.write(so)
             fout.write(se)
             fout.close()
+
+        if os.path.exists(commandfilepath):
+            os.remove(commandfilepath)
     except OSError as e:
-        print e
+        console_exception(e)
     except ValueError as e:
-        print e
+        console_exception(e)
     except subprocess.CalledProcessError as e:
-        print e
+        console_exception(e)
 
 
 def main_loop(parsedargs):
@@ -212,7 +226,6 @@ def main():
 
             if "Options:" in e:
                 console(e, plainprint=True)
-
 
     except KeyboardInterrupt:
         console(color="yellow", msg="bye")
