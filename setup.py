@@ -14,7 +14,7 @@ from future import standard_library
 standard_library.install_aliases()
 from setuptools import setup
 setup(name='reposmon',
-      version='13',
+      version='15',
       description='Monitor a git repository, execute a command when it changes. Basically a polling git-hook for pull.',
       url='https://github.com/erikdejonge/reposmon',
       author='Erik de Jonge',
@@ -27,7 +27,7 @@ setup(name='reposmon',
       classifiers=[
           "Programming Language :: Python",
           "Programming Language :: Python :: 3",
-          "Development Status :: Beta",
+          "Development Status :: 4 - Beta ",
           "Intended Audience :: Developers",
           "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
           "Operating System :: POSIX",
