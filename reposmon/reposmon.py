@@ -18,6 +18,15 @@ Options:
   -g --gitfolder=<gitfolder>  Folder to check the git repos out [default: .].
   -c --cmdfolder=<cmdfolder>  Folder from where to run the command [default: .].
 """
+from __future__ import print_function
+from __future__ import unicode_literals
+from __future__ import division
+from __future__ import absolute_import
+from builtins import open
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import object
 
 # Active8 (04-03-15)
 # author: erik@a8.nl
@@ -145,9 +154,9 @@ def call_command(command, cmdfolder, verbose=False):
         else:
             so, se = proc.communicate()
             if proc.returncode != 0 or verbose:
-                print "command:"
-                print so
-                print se
+                print("command:")
+                print(so)
+                print(se)
 
             fout = open(join(cmdfolder, "reposmon.out"), "w")
             fout.write(so)
@@ -216,7 +225,7 @@ def main():
             if parsedargs.giturl and parsedargs.command:
                 main_loop(parsedargs)
             else:
-                print __doc__
+                print(__doc__)
 
     except DocoptExit as e:
         if hasattr(e, "usage"):
