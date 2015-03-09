@@ -30,10 +30,9 @@ standard_library.install_aliases()
 # license: GNU-GPL2
 
 import time
-from os.path import join, basename
 from arguments import *
 from git import Repo, GitCommandError
-from appinstance import AppInstance, AppInstanceRunning
+from appinstance import *
 from cmdssh import call_command
 
 
@@ -130,7 +129,10 @@ def main_loop(parsedargs):
             if parsedargs.verbose:
                 console("changed, calling:", parsedargs.command, "in", parsedargs.cmdfolder, color="yellow")
 
-            call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose)
+            result = call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose, streamoutput=False, returnoutput=True)
+            fout = open(join(parsedargs.cmdfolder, "reposmon.out"), "w")
+            fout.write(result)
+            fout.close()
         else:
             if parsedargs.verbose:
                 console(parsedargs.giturl, "not changed")
@@ -152,7 +154,7 @@ def main():
 
         if parsedargs.command and parsedargs.giturl:
             argstring = str(parsedargs.command) + str(parsedargs.giturl)
-        with AppInstance(arguments=argstring):
+        with AppInstance(args=argstring):
             schema = Schema({"command": Or(None, str),
                              "giturl": Or(None, lambda x: ".git" in x),
                              Optional("-i"): int,
@@ -172,15 +174,6 @@ def main():
             else:
                 print(__doc__)
 
-    except DocoptExit as de:
-        if hasattr(de, "usage"):
-            console(de.usage, plainprint=True)
-        else:
-            de = str(de).strip()
-
-            if "Options:" in e:
-                console(e, plainprint=True)
-
     except KeyboardInterrupt:
         console(color="yellow", msg="bye")
     except AppInstanceRunning:
@@ -189,6 +182,14 @@ def main():
                 console(color="red", msg="instance runs already")
         else:
             console('parsedargs is None')
+    except DocoptExit as de:
+        if hasattr(de, "usage"):
+            console(de.usage, plainprint=True)
+        else:
+            de = str(de).strip()
+
+            if "Options:" in de:
+                console(de, plainprint=True)
 
 
 if __name__ == "__main__":
