@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # coding=utf-8
 """
 reposmon.py
@@ -22,18 +22,25 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
+from builtins import open
 from future import standard_library
 standard_library.install_aliases()
+from builtins import str
+from builtins import object
 
 # Active8 (04-03-15)
 # author: erik@a8.nl
 # license: GNU-GPL2
 
 import time
+import hashlib
+import subprocess
+import stat
+from os.path import join, basename
 from arguments import *
 from git import Repo, GitCommandError
-from appinstance import *
-from cmdssh import call_command
+from appinstance import AppInstance, AppInstanceRunning
+from consoleprinter import console_exception
 
 
 class GitRepos(object):
@@ -74,9 +81,9 @@ class GitRepos(object):
                         return True
                     else:
                         return False
-                except GitCommandError as ge:
-                    console(ge, color="red")
-                    raise SystemExit(ge)
+                except GitCommandError as e:
+                    console(e, color="red")
+                    raise SystemExit(e)
             else:
                 try:
                     if verbose:
@@ -86,18 +93,18 @@ class GitRepos(object):
 
                     if verbose:
                         console(ret, color="yellow")
-                except GitCommandError as ge:
-                    console(ge, color="red")
-                    raise SystemExit(ge)
+                except GitCommandError as e:
+                    console(e, color="red")
+                    raise SystemExit(e)
 
                 return True
-        except AssertionError as ae:
-            console(ae, color="red")
+        except AssertionError as e:
+            console(e, color="red")
             return False
         except KeyboardInterrupt:
             raise
-        except BaseException as be:
-            console(be, color="red")
+        except BaseException as e:
+            console(e, color="red")
             return False
 
     def check_repos(self, folder, url, verbose=False):
@@ -117,6 +124,55 @@ class GitRepos(object):
         return self.clone_or_pull_from(gp, url, name, verbose)
 
 
+def call_command(command, cmdfolder, verbose=False):
+    """
+    @type command: str, unicode
+    @type cmdfolder: str, unicode
+    @type verbose: bool
+    @return: None
+    """
+    try:
+        if verbose:
+            console(cmdfolder, command, color="yellow")
+
+        commandfile = hashlib.md5(command).hexdigest() + ".sh"
+        commandfilepath = join(cmdfolder, commandfile)
+        open(commandfilepath, "w").write(command)
+
+        if not os.path.exists(commandfilepath):
+            raise ValueError("commandfile could not be made")
+
+        os.chmod(commandfilepath, stat.S_IREAD | stat.S_IWRITE | stat.S_IEXEC)
+        proc = subprocess.Popen(commandfilepath, stderr=subprocess.PIPE, stdout=subprocess.PIPE, cwd=cmdfolder, shell=True)
+
+        if verbose:
+            while proc.poll() is None:
+                output = proc.stdout.readline()
+
+                if len(output.strip()) > 0:
+                    console(output, color="yellow"),
+        else:
+            so, se = proc.communicate()
+            if proc.returncode != 0 or verbose:
+                print("command:")
+                print(so)
+                print(se)
+
+            fout = open(join(cmdfolder, "reposmon.out"), "w")
+            fout.write(so)
+            fout.write(se)
+            fout.close()
+
+        if os.path.exists(commandfilepath):
+            os.remove(commandfilepath)
+    except OSError as e:
+        console_exception(e)
+    except ValueError as e:
+        console_exception(e)
+    except subprocess.CalledProcessError as e:
+        console_exception(e)
+
+
 def main_loop(parsedargs):
     """
     @type parsedargs: Arguments
@@ -129,10 +185,7 @@ def main_loop(parsedargs):
             if parsedargs.verbose:
                 console("changed, calling:", parsedargs.command, "in", parsedargs.cmdfolder, color="yellow")
 
-            result = call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose, streamoutput=False, returnoutput=True)
-            fout = open(join(parsedargs.cmdfolder, "reposmon.out"), "w")
-            fout.write(result)
-            fout.close()
+            call_command(parsedargs.command, parsedargs.cmdfolder, parsedargs.verbose)
         else:
             if parsedargs.verbose:
                 console(parsedargs.giturl, "not changed")
@@ -154,7 +207,7 @@ def main():
 
         if parsedargs.command and parsedargs.giturl:
             argstring = str(parsedargs.command) + str(parsedargs.giturl)
-        with AppInstance(args=argstring):
+        with AppInstance(arguments=argstring):
             schema = Schema({"command": Or(None, str),
                              "giturl": Or(None, lambda x: ".git" in x),
                              Optional("-i"): int,
@@ -174,6 +227,15 @@ def main():
             else:
                 print(__doc__)
 
+    except DocoptExit as e:
+        if hasattr(e, "usage"):
+            console(e.usage, plainprint=True)
+        else:
+            e = str(e).strip()
+
+            if "Options:" in e:
+                console(e, plainprint=True)
+
     except KeyboardInterrupt:
         console(color="yellow", msg="bye")
     except AppInstanceRunning:
@@ -182,14 +244,6 @@ def main():
                 console(color="red", msg="instance runs already")
         else:
             console('parsedargs is None')
-    except DocoptExit as de:
-        if hasattr(de, "usage"):
-            console(de.usage, plainprint=True)
-        else:
-            de = str(de).strip()
-
-            if "Options:" in de:
-                console(de, plainprint=True)
 
 
 if __name__ == "__main__":
