@@ -15,7 +15,11 @@ setup(name='reposmon',
       author='Erik de Jonge',
       author_email='erik@a8.nl',
       license='GPL',
-      scripts=['reposmon/reposmon'],
+      entry_points={
+          'console_scripts': [
+              'hist=reposmon:main',
+          ],
+      },
       packages=['reposmon'],
       zip_safe=True,
       install_requires=['consoleprinter', 'arguments', 'appinstance', 'schema', 'GitPython', 'pyyaml', 'docopt', 'psutil'],
