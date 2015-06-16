@@ -9,7 +9,7 @@ license: GNU-GPL2
 
 from setuptools import setup
 setup(name='reposmon',
-      version='51',
+      version='52',
       description='Monitor a git repository, execute a command when it changes. Basically a polling git-hook for pull.',
       url='https://github.com/erikdejonge/reposmon',
       author='Erik de Jonge',
@@ -20,7 +20,7 @@ setup(name='reposmon',
               'reposmon=reposmon:main',
           ],
       },
-      packages=['reposmon'],
+      packages=[b'reposmon'],
       zip_safe=True,
       #install_requires=['consoleprinter', 'arguments', 'appinstance', 'schema', 'GitPython', 'pyyaml', 'docopt', 'psutil'],
       classifiers=[
